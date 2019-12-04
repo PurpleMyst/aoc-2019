@@ -3,15 +3,30 @@ import itertools
 import typing as t
 
 
-def is_sorted(s: str) -> bool:
-    for i, c in enumerate(s[:-1]):
-        if c > s[i + 1]:
+def is_sorted(s: t.Iterable[t.Any]) -> bool:
+    it = iter(s)
+
+    i = next(it)
+    for j in it:
+        if i > j:
             return False
+
+        i = j
+
     return True
 
 
 def has_pair(s: str) -> bool:
-    return any(len(tuple(group)) >= 2 for _, group in itertools.groupby(s))
+    for _, group in itertools.groupby(s):
+        try:
+            next(group)
+            next(group)
+        except StopIteration:
+            pass
+        else:
+            return True
+
+    return False
 
 
 def load_input() -> t.Iterable[str]:
