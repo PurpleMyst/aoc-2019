@@ -41,20 +41,23 @@ mod second {
 fn main() {
     let (low, high) = load_input();
 
+    let candidates = (low..high)
+        .map(|n| n.to_string())
+        .filter(|s| is_sorted(s.as_bytes()))
+        .collect::<Vec<_>>();
+
     println!(
         "{}",
-        (low..high)
-            .map(|n| n.to_string())
-            .filter(|s| is_sorted(s.as_bytes()))
+        candidates
+            .iter()
             .filter(|s| first::has_pair(s.as_bytes()))
             .count()
     );
 
     println!(
         "{}",
-        (low..high)
-            .map(|n| n.to_string())
-            .filter(|s| is_sorted(s.as_bytes()))
+        candidates
+            .into_iter()
             .filter(|s| second::has_pair(s.as_bytes()))
             .count()
     );
