@@ -2,63 +2,48 @@ fn load_input() -> (usize, usize) {
     let mut it = include_str!("input.txt").trim().split('-');
     let low = it.next().unwrap().parse::<usize>().unwrap();
     let high = it.next().unwrap().parse::<usize>().unwrap();
-    assert!(it.next().is_none());
     (low, high)
-}
-
-fn is_sorted(s: &[u8]) -> bool {
-    (0..s.len() - 1).all(|i| s[i] <= s[i + 1])
-}
-
-mod first {
-    pub(super) fn has_pair(s: &[u8]) -> bool {
-        s.windows(2).any(|win| win[0] == win[1])
-    }
-}
-
-mod second {
-    pub(super) fn has_pair(s: &[u8]) -> bool {
-        let mut cur = 0;
-        let mut count = 0;
-
-        for c in s.iter().copied() {
-            if cur != c {
-                if count == 2 {
-                    return true;
-                }
-
-                cur = c;
-                count = 1;
-            } else {
-                count += 1;
-            }
-        }
-
-        count == 2
-    }
 }
 
 fn main() {
     let (low, high) = load_input();
 
-    let candidates = (low..high)
-        .map(|n| n.to_string())
-        .filter(|s| is_sorted(s.as_bytes()))
-        .collect::<Vec<_>>();
+    let mut part1 = 0;
+    let mut part2 = 0;
 
-    println!(
-        "{}",
-        candidates
-            .iter()
-            .filter(|s| first::has_pair(s.as_bytes()))
-            .count()
-    );
+    for a in 0..=9 {
+        for b in a..=9 {
+            for c in b..=9 {
+                for d in c..=9 {
+                    for e in d..=9 {
+                        for f in e..=9 {
+                            let n = a * 100000 + b * 10000 + c * 1000 + d * 100 + e * 10 + f * 1;
+                            if n < low || n > high {
+                                continue;
+                            }
 
-    println!(
-        "{}",
-        candidates
-            .into_iter()
-            .filter(|s| second::has_pair(s.as_bytes()))
-            .count()
-    );
+                            let mut counts = [0; 10];
+                            counts[a] += 1;
+                            counts[b] += 1;
+                            counts[c] += 1;
+                            counts[d] += 1;
+                            counts[e] += 1;
+                            counts[f] += 1;
+
+                            if counts.iter().copied().any(|n| n >= 2) {
+                                part1 += 1;
+                            }
+
+                            if counts.iter().copied().any(|n| n == 2) {
+                                part2 += 1;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    println!("{}", part1);
+    println!("{}", part2);
 }
