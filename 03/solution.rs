@@ -22,24 +22,25 @@ fn main() {
 
     let mut wires = include_str!("input.txt").trim().lines().map(points);
 
-    let wire1 = wires.next().unwrap();
-    let wire2 = wires.next().unwrap();
+    let wire1 = wires.next().unwrap().collect::<Vec<_>>();
+    let wire2 = wires.next().unwrap().collect::<Vec<_>>();
 
     // Part 1
     println!(
         "{}",
         wire1
-            .clone()
+            .iter()
+            .copied()
             .collect::<HashSet<_>>()
-            .intersection(&wire2.clone().collect())
+            .intersection(&wire2.iter().copied().collect())
             .map(|(x, y)| x.abs() + y.abs())
             .min()
             .unwrap()
     );
 
     // Part 2
-    let wire1 = wire1.enumerate().map(|(k, v)| (v, k + 1));
     let wire2 = wire2
+        .into_iter()
         .enumerate()
         .map(|(k, v)| (v, k + 1))
         .collect::<HashMap<_, _>>();
@@ -47,7 +48,9 @@ fn main() {
     println!(
         "{}",
         wire1
-            .filter_map(|(k, v)| Some(v + wire2.get(&k)?))
+            .into_iter()
+            .enumerate()
+            .filter_map(|(v, k)| Some((v + 1) + wire2.get(&k)?))
             .min()
             .unwrap()
     );
