@@ -18,39 +18,36 @@ fn points(path: &str) -> impl Iterator<Item = (isize, isize)> + Clone + '_ {
 }
 
 fn main() {
-    use std::collections::{HashMap, HashSet};
+    use std::collections::BTreeMap;
 
     let mut wires = include_str!("input.txt").trim().lines().map(points);
 
-    let wire1 = wires.next().unwrap().collect::<Vec<_>>();
-    let wire2 = wires.next().unwrap().collect::<Vec<_>>();
+    let wire1 = wires.next().unwrap();
+    let wire2: Vec<_> = wires.next().unwrap().collect();
+
+    let wire1 = wire1
+        .enumerate()
+        .map(|(k, v)| (v, k + 1))
+        .collect::<BTreeMap<_, _>>();
 
     // Part 1
     println!(
         "{}",
-        wire1
+        wire2
             .iter()
-            .copied()
-            .collect::<HashSet<_>>()
-            .intersection(&wire2.iter().copied().collect())
+            .filter(|point| wire1.contains_key(point))
             .map(|(x, y)| x.abs() + y.abs())
             .min()
             .unwrap()
     );
 
     // Part 2
-    let wire2 = wire2
-        .into_iter()
-        .enumerate()
-        .map(|(k, v)| (v, k + 1))
-        .collect::<HashMap<_, _>>();
-
     println!(
         "{}",
-        wire1
+        wire2
             .into_iter()
             .enumerate()
-            .filter_map(|(v, k)| Some((v + 1) + wire2.get(&k)?))
+            .filter_map(|(v, k)| Some((v + 1) + wire1.get(&k)?))
             .min()
             .unwrap()
     );
