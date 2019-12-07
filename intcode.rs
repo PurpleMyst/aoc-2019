@@ -89,14 +89,7 @@ pub struct Interpreter {
 
     pub pc: usize,
 
-    pub state: InterpreterState,
-}
-
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum InterpreterState {
-    Running,
-    WaitingForInput,
-    Halted,
+    pub done: bool,
 }
 
 impl Interpreter {
@@ -106,7 +99,7 @@ impl Interpreter {
             input: VecDeque::new(),
             output: VecDeque::new(),
             pc: 0,
-            state: InterpreterState::Running,
+            done: false,
         }
     }
 
@@ -163,8 +156,7 @@ impl Interpreter {
                     99,
                 ) => {
                     self.pc = old_pc;
-                    self.state = InterpreterState::Halted;
-
+                    self.done = true;
                     break;
                 }
 
@@ -178,12 +170,8 @@ impl Interpreter {
 
                     if let Some(input) = self.input.pop_front() {
                         store!(a, Cell::from(input));
-
-                        self.state = InterpreterState::Running;
                     } else {
                         self.pc = old_pc;
-                        self.state = InterpreterState::WaitingForInput;
-
                         break;
                     }
                 }

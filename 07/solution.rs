@@ -19,7 +19,7 @@ fn amplify(program: &Vec<Cell>, (a, b, c, d, e): Phases) -> isize {
 
     interpreters[0].input.push_back(0);
 
-    while interpreters.last().unwrap().state != InterpreterState::Halted {
+    while !interpreters.last().unwrap().done {
         for i in 0..interpreters.len() {
             interpreters[i].run();
 
