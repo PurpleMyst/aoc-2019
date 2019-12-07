@@ -169,7 +169,7 @@ impl Interpreter {
                     let a = next_cell!();
 
                     if let Some(input) = self.input.pop_front() {
-                        store!(a, Cell::from(input));
+                        store!(a, input);
                     } else {
                         self.pc = old_pc;
                         break;
