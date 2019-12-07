@@ -1,3 +1,4 @@
+use std::collections::VecDeque;
 use std::convert::TryFrom;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -80,113 +81,163 @@ impl From<Cell> for isize {
     }
 }
 
-pub fn interpret(program: &mut [Cell], input: isize) -> Vec<isize> {
-    let mut pc = 0;
+#[derive(Debug)]
+pub struct Interpreter {
+    pub program: Vec<Cell>,
+    pub input: VecDeque<isize>,
+    pub output: VecDeque<isize>,
 
-    let mut output = Vec::new();
+    pub pc: usize,
 
-    macro_rules! load {
-        ($mode:expr, $cell:expr) => {{
-            let cell = isize::from($cell);
+    pub state: InterpreterState,
+}
 
-            match $mode {
-                ParameterMode::Position => isize::from(program[cell as usize]),
-                ParameterMode::Immediate => cell,
-            }
-        }};
-    };
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum InterpreterState {
+    Running,
+    WaitingForInput,
+    Halted,
+}
 
-    macro_rules! store {
-        ($position:expr, $value:expr) => {
-            program[isize::from($position) as usize] = Cell::from($value);
-        };
-    }
-
-    macro_rules! next_cell {
-        () => {{
-            let arg = program[pc];
-            pc += 1;
-            arg
-        }};
-    }
-
-    loop {
-        match next_cell!() {
-            Cell::Instruction(a, b, ParameterMode::Position, 1) => {
-                let a = load!(a, next_cell!());
-                let b = load!(b, next_cell!());
-                let c = next_cell!();
-
-                store!(c, a + b);
-            }
-
-            Cell::Instruction(a, b, ParameterMode::Position, 2) => {
-                let a = load!(a, next_cell!());
-                let b = load!(b, next_cell!());
-                let c = next_cell!();
-
-                store!(c, a * b);
-            }
-
-            Cell::Instruction(
-                ParameterMode::Position,
-                ParameterMode::Position,
-                ParameterMode::Position,
-                99,
-            ) => return output,
-
-            Cell::Instruction(
-                ParameterMode::Position,
-                ParameterMode::Position,
-                ParameterMode::Position,
-                3,
-            ) => {
-                let a = next_cell!();
-
-                store!(a, Cell::from(input));
-            }
-
-            Cell::Instruction(a, ParameterMode::Position, ParameterMode::Position, 4) => {
-                let a = load!(a, next_cell!());
-
-                output.push(a);
-            }
-
-            Cell::Instruction(a, b, ParameterMode::Position, 5) => {
-                let a = load!(a, next_cell!());
-                let b = load!(b, next_cell!());
-
-                if a != 0 {
-                    pc = b as usize;
-                }
-            }
-
-            Cell::Instruction(a, b, ParameterMode::Position, 6) => {
-                let a = load!(a, next_cell!());
-                let b = load!(b, next_cell!());
-
-                if a == 0 {
-                    pc = b as usize;
-                }
-            }
-
-            Cell::Instruction(a, b, ParameterMode::Position, 7) => {
-                let a = load!(a, next_cell!());
-                let b = load!(b, next_cell!());
-                let c = next_cell!();
-
-                store!(c, if a < b { 1 } else { 0 });
-            }
-
-            Cell::Instruction(a, b, ParameterMode::Position, 8) => {
-                let a = load!(a, next_cell!());
-                let b = load!(b, next_cell!());
-                let c = next_cell!();
-
-                store!(c, if a == b { 1 } else { 0 });
-            }
-
-            _ => unreachable!("tried to execute {:?}", isize::from(program[pc - 1])),
+impl Interpreter {
+    pub fn new(program: Vec<Cell>) -> Self {
+        Self {
+            program,
+            input: VecDeque::new(),
+            output: VecDeque::new(),
+            pc: 0,
+            state: InterpreterState::Running,
         }
     }
+
+    pub fn run(&mut self) {
+        macro_rules! load {
+            ($mode:expr, $cell:expr) => {{
+                let cell = isize::from($cell);
+
+                match $mode {
+                    ParameterMode::Position => isize::from(self.program[cell as usize]),
+                    ParameterMode::Immediate => cell,
+                }
+            }};
+        };
+
+        macro_rules! store {
+            ($position:expr, $value:expr) => {
+                self.program[isize::from($position) as usize] = Cell::from($value);
+            };
+        }
+
+        macro_rules! next_cell {
+            () => {{
+                let cell = self.program[self.pc];
+                self.pc += 1;
+                cell
+            }};
+        }
+
+        loop {
+            let old_pc = self.pc;
+
+            match next_cell!() {
+                Cell::Instruction(a, b, ParameterMode::Position, 1) => {
+                    let a = load!(a, next_cell!());
+                    let b = load!(b, next_cell!());
+                    let c = next_cell!();
+
+                    store!(c, a + b);
+                }
+
+                Cell::Instruction(a, b, ParameterMode::Position, 2) => {
+                    let a = load!(a, next_cell!());
+                    let b = load!(b, next_cell!());
+                    let c = next_cell!();
+
+                    store!(c, a * b);
+                }
+
+                Cell::Instruction(
+                    ParameterMode::Position,
+                    ParameterMode::Position,
+                    ParameterMode::Position,
+                    99,
+                ) => {
+                    self.pc = old_pc;
+                    self.state = InterpreterState::Halted;
+
+                    break;
+                }
+
+                Cell::Instruction(
+                    ParameterMode::Position,
+                    ParameterMode::Position,
+                    ParameterMode::Position,
+                    3,
+                ) => {
+                    let a = next_cell!();
+
+                    if let Some(input) = self.input.pop_front() {
+                        store!(a, Cell::from(input));
+
+                        self.state = InterpreterState::Running;
+                    } else {
+                        self.pc = old_pc;
+                        self.state = InterpreterState::WaitingForInput;
+
+                        break;
+                    }
+                }
+
+                Cell::Instruction(a, ParameterMode::Position, ParameterMode::Position, 4) => {
+                    let a = load!(a, next_cell!());
+
+                    self.output.push_back(a);
+                }
+
+                Cell::Instruction(a, b, ParameterMode::Position, 5) => {
+                    let a = load!(a, next_cell!());
+                    let b = load!(b, next_cell!());
+
+                    if a != 0 {
+                        self.pc = b as usize;
+                    }
+                }
+
+                Cell::Instruction(a, b, ParameterMode::Position, 6) => {
+                    let a = load!(a, next_cell!());
+                    let b = load!(b, next_cell!());
+
+                    if a == 0 {
+                        self.pc = b as usize;
+                    }
+                }
+
+                Cell::Instruction(a, b, ParameterMode::Position, 7) => {
+                    let a = load!(a, next_cell!());
+                    let b = load!(b, next_cell!());
+                    let c = next_cell!();
+
+                    store!(c, if a < b { 1 } else { 0 });
+                }
+
+                Cell::Instruction(a, b, ParameterMode::Position, 8) => {
+                    let a = load!(a, next_cell!());
+                    let b = load!(b, next_cell!());
+                    let c = next_cell!();
+
+                    store!(c, if a == b { 1 } else { 0 });
+                }
+
+                _ => unreachable!("tried to execute {:?}", isize::from(self.program[old_pc])),
+            }
+        }
+    }
+}
+
+pub fn load_program(input: &str) -> Vec<Cell> {
+    input
+        .trim()
+        .split(',')
+        .map(|n| <Cell as From<isize>>::from(n.parse().unwrap()))
+        .collect()
 }

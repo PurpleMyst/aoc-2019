@@ -1,22 +1,18 @@
-mod intcode {
-    include!("../intcode.rs");
-}
+include!("../intcode.rs");
 
 fn main() {
-    use intcode::*;
+    let program = load_program(include_str!("input.txt"));
 
-    let mut program = include_str!("input.txt")
-        .trim()
-        .split(",")
-        .map(|n| <Cell as From<isize>>::from(n.parse().unwrap()))
-        .collect::<Vec<_>>();
+    let run = |input| {
+        let mut interpreter = Interpreter::new(program.clone());
+        interpreter.input.push_back(input);
+        interpreter.run();
+        interpreter.output.pop_back().unwrap()
+    };
 
     // Part 1
-    println!(
-        "{:?}",
-        interpret(program.clone().as_mut_slice(), 1).last().unwrap()
-    );
+    println!("{}", run(1));
 
     // Part 2
-    println!("{:?}", interpret(program.as_mut_slice(), 5).last().unwrap());
+    println!("{}", run(5));
 }

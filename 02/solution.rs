@@ -1,25 +1,22 @@
-mod intcode {
-    include!("../intcode.rs");
-}
+include!("../intcode.rs");
 
 fn main() {
-    let program = include_str!("input.txt")
-        .trim()
-        .split(',')
-        .map(|n| <From<usize>>::from(n.parse().unwrap()))
-        .collect::<Vec<intcode::Cell>>;
+    let program = load_program(include_str!("input.txt"));
 
-    println!("{}", interpet_changing(&program, 12, 2));
+    let run = |noun, verb| {
+        let mut interpreter = Interpreter::new(program.clone());
+        interpreter.program[1] = noun;
+        interpreter.program[2] = verb;
+        interpreter.run();
+        isize::from(interpreter.program[0])
+    };
+
+    println!("{}", run(Cell::from(12), Cell::from(2)));
 
     let (noun, verb) = (0..100)
-        .flat_map(|noun| (0..100).map(move |verb| (intcode::Cell::from(noun), intcode::Cell::from(verb))))
-        .find(|(noun, verb)| {
-            let mut program = program.clone();
-            program[1] = noun;
-            program[2] = verb;
-            intcode::interpret(&mut program) == 19690720
-        })
+        .flat_map(|noun| (0..100).map(move |verb| (Cell::from(noun), Cell::from(verb))))
+        .find(|(noun, verb)| run(*noun, *verb) == 19690720)
         .unwrap();
 
-    println!("{}", noun * 100 + verb);
+    println!("{}", isize::from(noun) * 100 + isize::from(verb));
 }
