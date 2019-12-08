@@ -47,7 +47,7 @@ fn main() {
                 "{}",
                 match col {
                     BLACK => ' ',
-                    WHITE => '#',
+                    WHITE => '█',
                     _ => unreachable!(),
                 }
             );
