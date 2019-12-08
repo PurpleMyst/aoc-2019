@@ -5,7 +5,7 @@ const TARGET: isize = 19690720;
 fn main() {
     let program = load_program(include_str!("input.txt"));
 
-    let mut run = |noun, verb| {
+    let run = |noun, verb| {
         let mut interpreter = Interpreter::new(program.clone());
         interpreter.program[1] = noun;
         interpreter.program[2] = verb;
