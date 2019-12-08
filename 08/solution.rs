@@ -29,6 +29,8 @@ fn main() {
         .min_by_key(|layer| *layer.get(&b'0').unwrap())
         .unwrap();
 
+    println!("{}", layer.get(&b'1').unwrap() * layer.get(&b'2').unwrap());
+
     let mut image = [TRANSPARENT; WIDTH * HEIGHT];
 
     layers.for_each(|layer| {
