@@ -1,6 +1,6 @@
 include!("../intcode.rs");
 
-const TARGET: isize = 19690720;
+const TARGET: i64 = 19690720;
 
 fn main() {
     let program = load_program(include_str!("input.txt"));
@@ -10,14 +10,14 @@ fn main() {
         interpreter.program[1] = noun;
         interpreter.program[2] = verb;
         interpreter.run();
-        isize::from(interpreter.program[0])
+        i64::from(interpreter.program[0])
     };
 
-    println!("{}", run(Cell::from(12), Cell::from(2)));
+    println!("{}", run(Cell::Value(12), Cell::Value(2)));
 
     let mut options = Vec::with_capacity(100 * 100);
-    for noun in (0..100).map(Cell::from) {
-        for verb in (0..100).map(Cell::from) {
+    for noun in (0..100).map(Cell::Value) {
+        for verb in (0..100).map(Cell::Value) {
             options.push((noun, verb));
         }
     }

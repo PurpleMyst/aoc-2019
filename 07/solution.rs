@@ -1,8 +1,8 @@
 include!("../intcode.rs");
 
-type Phases = (isize, isize, isize, isize, isize);
+type Phases = (i64, i64, i64, i64, i64);
 
-fn amplify(program: &Vec<Cell>, (a, b, c, d, e): Phases) -> isize {
+fn amplify(program: &Vec<Cell>, (a, b, c, d, e): Phases) -> i64 {
     let mut interpreters = [
         Interpreter::new(program.clone()),
         Interpreter::new(program.clone()),
@@ -34,7 +34,7 @@ fn amplify(program: &Vec<Cell>, (a, b, c, d, e): Phases) -> isize {
     interpreters[0].input[0]
 }
 
-fn for_all_phases(left: isize, right: isize, mut f: impl FnMut(Phases) -> ()) {
+fn for_all_phases(left: i64, right: i64, mut f: impl FnMut(Phases) -> ()) {
     for a in left..=right {
         for b in left..=right {
             if !(b != a) {
@@ -61,10 +61,10 @@ fn for_all_phases(left: isize, right: isize, mut f: impl FnMut(Phases) -> ()) {
     }
 }
 
-fn largest_output(program: &Vec<Cell>, low: isize, high: isize) -> isize {
+fn largest_output(program: &Vec<Cell>, low: i64, high: i64) -> i64 {
     let mut result = 0;
     for_all_phases(low, high, |phases| {
-        let output = isize::from(amplify(&program, phases));
+        let output = i64::from(amplify(&program, phases));
 
         if output > result {
             result = output;

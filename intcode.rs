@@ -5,25 +5,28 @@ use std::convert::TryFrom;
 pub enum ParameterMode {
     Position,
     Immediate,
+    Relative,
 }
 
-impl TryFrom<isize> for ParameterMode {
+impl TryFrom<i64> for ParameterMode {
     type Error = ();
 
-    fn try_from(n: isize) -> Result<Self, Self::Error> {
+    fn try_from(n: i64) -> Result<Self, Self::Error> {
         match n {
             0 => Ok(Self::Position),
             1 => Ok(Self::Immediate),
+            2 => Ok(Self::Relative),
             _ => Err(()),
         }
     }
 }
 
-impl From<ParameterMode> for isize {
-    fn from(mode: ParameterMode) -> isize {
+impl From<ParameterMode> for i64 {
+    fn from(mode: ParameterMode) -> i64 {
         match mode {
             ParameterMode::Position => 0,
             ParameterMode::Immediate => 1,
+            ParameterMode::Relative => 2,
         }
     }
 }
@@ -31,50 +34,52 @@ impl From<ParameterMode> for isize {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Cell {
     Instruction(ParameterMode, ParameterMode, ParameterMode, u8),
-    Value(isize),
+    Value(i64),
 }
 
-impl From<isize> for Cell {
-    fn from(mut value: isize) -> Cell {
-        let orig_value = value;
+impl Cell {
+    fn to_instruction(&mut self) {
+        let mut value = match self {
+            Cell::Value(value) => *value,
+            Cell::Instruction(..) => return,
+        };
 
         let opcode = value % 100;
 
         match opcode {
-            1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 99 => {
+            1..=9 | 99 => {
                 let mut doit = || {
                     value /= 100;
 
-                    let a_mode = ParameterMode::try_from(value % 10)?;
+                    let a = ParameterMode::try_from(value % 10).ok()?;
                     value /= 10;
 
-                    let b_mode = ParameterMode::try_from(value % 10)?;
+                    let b = ParameterMode::try_from(value % 10).ok()?;
                     value /= 10;
 
-                    let c_mode = ParameterMode::try_from(value % 10)?;
+                    let c = ParameterMode::try_from(value % 10).ok()?;
                     value /= 10;
 
-                    if value == 0 {
-                        Ok(Cell::Instruction(a_mode, b_mode, c_mode, opcode as _))
-                    } else {
-                        Err(())
-                    }
+                    Some((a, b, c))
                 };
 
-                doit().unwrap_or(Cell::Value(orig_value))
+                if let Some((a, b, c)) = doit() {
+                    if value == 0 {
+                        *self = Cell::Instruction(a, b, c, opcode as _);
+                    }
+                }
             }
 
-            _ => Cell::Value(orig_value),
+            _ => {}
         }
     }
 }
 
-impl From<Cell> for isize {
-    fn from(cell: Cell) -> isize {
+impl From<Cell> for i64 {
+    fn from(cell: Cell) -> i64 {
         match cell {
             Cell::Instruction(a, b, c, opcode) => {
-                (isize::from(c) * 1000 + isize::from(b) * 100 + isize::from(a) * 10) * 10
-                    + opcode as isize
+                (i64::from(c) * 100 + i64::from(b) * 10 + i64::from(a)) * 100 + opcode as i64
             }
             Cell::Value(value) => value,
         }
@@ -84,12 +89,14 @@ impl From<Cell> for isize {
 #[derive(Debug)]
 pub struct Interpreter {
     pub program: Vec<Cell>,
-    pub input: VecDeque<isize>,
-    pub output: VecDeque<isize>,
+    pub input: VecDeque<i64>,
+    pub output: VecDeque<i64>,
 
     pub pc: usize,
 
     pub done: bool,
+
+    pub relative_base: i64,
 }
 
 impl Interpreter {
@@ -100,24 +107,42 @@ impl Interpreter {
             output: VecDeque::new(),
             pc: 0,
             done: false,
+            relative_base: 0,
         }
     }
 
     pub fn run(&mut self) {
+        macro_rules! position {
+            ($mode:expr, $cell:expr) => {{
+                match $mode {
+                    ParameterMode::Position => i64::from($cell),
+                    ParameterMode::Relative => i64::from($cell) + self.relative_base,
+                    ParameterMode::Immediate => unreachable!(),
+                }
+            }};
+        }
+
         macro_rules! load {
             ($mode:expr, $cell:expr) => {{
-                let cell = isize::from($cell);
+                let cell = i64::from($cell);
 
                 match $mode {
-                    ParameterMode::Position => isize::from(self.program[cell as usize]),
+                    mode @ ParameterMode::Position | mode @ ParameterMode::Relative => {
+                        let idx = position!(mode, cell);
+
+                        i64::from(self.program[idx as usize])
+                    }
+
                     ParameterMode::Immediate => cell,
                 }
             }};
         };
 
         macro_rules! store {
-            ($position:expr, $value:expr) => {
-                self.program[isize::from($position) as usize] = Cell::from($value);
+            ($idx:expr, $value:expr) => {
+                let idx = $idx;
+
+                self.program[idx as usize] = Cell::Value($value);
             };
         }
 
@@ -132,19 +157,21 @@ impl Interpreter {
         loop {
             let old_pc = self.pc;
 
+            self.program[self.pc].to_instruction();
+
             match next_cell!() {
-                Cell::Instruction(a, b, ParameterMode::Position, 1) => {
+                Cell::Instruction(a, b, c, 1) => {
                     let a = load!(a, next_cell!());
                     let b = load!(b, next_cell!());
-                    let c = next_cell!();
+                    let c = position!(c, next_cell!());
 
                     store!(c, a + b);
                 }
 
-                Cell::Instruction(a, b, ParameterMode::Position, 2) => {
+                Cell::Instruction(a, b, c, 2) => {
                     let a = load!(a, next_cell!());
                     let b = load!(b, next_cell!());
-                    let c = next_cell!();
+                    let c = position!(c, next_cell!());
 
                     store!(c, a * b);
                 }
@@ -160,13 +187,8 @@ impl Interpreter {
                     break;
                 }
 
-                Cell::Instruction(
-                    ParameterMode::Position,
-                    ParameterMode::Position,
-                    ParameterMode::Position,
-                    3,
-                ) => {
-                    let a = next_cell!();
+                Cell::Instruction(a, ParameterMode::Position, ParameterMode::Position, 3) => {
+                    let a = position!(a, next_cell!());
 
                     if let Some(input) = self.input.pop_front() {
                         store!(a, input);
@@ -200,23 +222,32 @@ impl Interpreter {
                     }
                 }
 
-                Cell::Instruction(a, b, ParameterMode::Position, 7) => {
+                Cell::Instruction(a, b, c, 7) => {
                     let a = load!(a, next_cell!());
                     let b = load!(b, next_cell!());
-                    let c = next_cell!();
+                    let c = position!(c, next_cell!());
 
                     store!(c, if a < b { 1 } else { 0 });
                 }
 
-                Cell::Instruction(a, b, ParameterMode::Position, 8) => {
+                Cell::Instruction(a, b, c, 8) => {
                     let a = load!(a, next_cell!());
                     let b = load!(b, next_cell!());
-                    let c = next_cell!();
+                    let c = position!(c, next_cell!());
 
                     store!(c, if a == b { 1 } else { 0 });
                 }
 
-                _ => unreachable!("tried to execute {:?}", isize::from(self.program[old_pc])),
+                Cell::Instruction(a, ParameterMode::Position, ParameterMode::Position, 9) => {
+                    let a = load!(a, next_cell!());
+
+                    self.relative_base += a;
+                }
+
+                _ => {
+                    self.pc = old_pc;
+                    panic!("unknown opcode {:?}", self.program[self.pc])
+                }
             }
         }
     }
@@ -226,6 +257,6 @@ pub fn load_program(input: &str) -> Vec<Cell> {
     input
         .trim()
         .split(',')
-        .map(|n| <Cell as From<isize>>::from(n.parse().unwrap()))
+        .map(|n| Cell::Value(n.parse().unwrap()))
         .collect()
 }
