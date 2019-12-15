@@ -1,73 +1,48 @@
-use std::collections::HashMap;
-
-type Screen = HashMap<(i64, i64), i64>;
-
 const BLOCK: i64 = 2;
-const PADDLE: i64 = 3;
 const BALL: i64 = 4;
 
 include!("../intcode.rs");
 
 fn main() {
     let mut program = load_program(include_str!("input.txt"));
-    program.extend_from_slice(&[Cell::Value(0); 100]);
+    program.extend_from_slice(&[Cell::Value(0); 14]);
 
-    let initial_screen = {
+    let part1 = {
         let mut interpreter = Interpreter::new(program.clone());
         interpreter.run();
 
         interpreter
             .output
-            .as_slices()
-            .0
-            .chunks(3)
-            .map(|chunk| ((chunk[0], chunk[1]), chunk[2]))
-            .collect::<Screen>()
+            .into_iter()
+            .skip(2)
+            .step_by(3)
+            .filter(|&tile| tile == BLOCK)
+            .count()
     };
+    println!("{}", part1);
 
     // paddle x coordinate
-    let mut p_x = 0;
+    let mut p_x = 21;
 
     // ball x coordinate
-    let mut b_x = None;
-    let mut b_x0 = 0;
-
-    let mut part1 = 0;
-
-    for ((x, y), tile) in initial_screen {
-        match tile {
-            BLOCK => part1 += 1,
-            PADDLE => p_x = x,
-            BALL => b_x0 = x,
-            _ => {}
-        }
-    }
-
-    println!("{}", part1);
+    let mut b_x = p_x - 2;
 
     program[0] = Cell::Value(2);
 
     let mut interpreter = Interpreter::new(program);
 
-    let mut screen: Screen = HashMap::new();
-
     let mut score = 0;
 
     while !interpreter.done {
-        let joystick;
-
-        if let Some(b_x) = b_x {
-            let b_fx: i64 = b_x + (b_x - b_x0) - 1;
-
-            joystick = (b_fx - p_x).signum();
-            p_x += joystick;
-
-            b_x0 = b_x;
+        interpreter.input.push_back(if b_x < p_x {
+            p_x -= 1;
+            -1
+        } else if b_x != p_x {
+            p_x += 1;
+            1
         } else {
-            joystick = 0;
-        }
-
-        interpreter.input.push_back(joystick);
+            0
+        });
 
         interpreter.run();
 
@@ -79,10 +54,8 @@ fn main() {
             if x == -1 && y == 0 {
                 score = tile;
             } else if tile == BALL {
-                b_x = Some(x);
+                b_x = x;
             }
-
-            screen.insert((x, y), tile);
         }
     }
 
