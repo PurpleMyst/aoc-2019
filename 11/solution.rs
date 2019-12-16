@@ -1,6 +1,6 @@
 use std::{
     cmp::{max, min},
-    collections::HashSet,
+    collections::HashMap,
 };
 
 include!("../intcode.rs");
@@ -11,7 +11,7 @@ fn main() {
     let mut program = load_program(include_str!("input.txt"));
     program.extend_from_slice(&[Cell::Value(0); 500]);
 
-    let run = |whites: &mut HashSet<(i64, i64)>, painted: &mut HashSet<(i64, i64)>| {
+    let run = |colors: &mut HashMap<(i64, i64), i64>| {
         let mut interpreter = Interpreter::new(program.clone());
 
         let mut x = 0i64;
@@ -21,7 +21,7 @@ fn main() {
         loop {
             interpreter
                 .input
-                .push_back(if whites.contains(&(x, y)) { 1 } else { 0 });
+                .push_back(colors.get(&(x, y)).copied().unwrap_or(0));
 
             interpreter.run();
 
@@ -32,16 +32,7 @@ fn main() {
             let color = interpreter.output.pop_front().unwrap();
             let direction = interpreter.output.pop_front().unwrap();
 
-            match color {
-                0 => {
-                    whites.remove(&(x, y));
-                }
-                1 => {
-                    whites.insert((x, y));
-                }
-                _ => unreachable!(),
-            }
-            painted.insert((x, y));
+            colors.insert((x, y), color);
 
             if direction == 0 {
                 d += 2;
@@ -55,36 +46,41 @@ fn main() {
         }
     };
 
-    let mut whites = HashSet::new();
-    let mut painted = HashSet::new();
+    let mut colors = HashMap::new();
 
-    run(&mut whites, &mut painted);
+    run(&mut colors);
 
-    println!("{}", painted.len());
+    println!("{}", colors.len());
 
-    whites.clear();
-    whites.insert((0, 0));
-    painted.clear();
+    colors.clear();
+    colors.insert((0, 0), 1);
 
-    run(&mut whites, &mut painted);
+    run(&mut colors);
 
     let mut min_x = 0;
     let mut max_x = 0;
     let mut min_y = 0;
     let mut max_y = 0;
 
-    for &(x, y) in &whites {
-        min_x = min(x, min_x);
-        max_x = max(x, max_x);
-        min_y = min(y, min_y);
-        max_y = max(y, max_y);
+    for (x, y) in colors.keys() {
+        min_x = min(*x, min_x);
+        max_x = max(*x, max_x);
+        min_y = min(*y, min_y);
+        max_y = max(*y, max_y);
     }
 
     // the for loops constitute a 90° CCW rotation
     // (x, y) -> (-y, x)
     for x in min_x..=max_x {
         for y in (min_y..=max_y).rev() {
-            print!("{}", if whites.contains(&(x, y)) { '█' } else { ' ' });
+            print!(
+                "{}",
+                if colors.get(&(x, y)) == Some(&1) {
+                    '█'
+                } else {
+                    ' '
+                }
+            );
         }
 
         println!();
