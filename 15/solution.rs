@@ -1,26 +1,33 @@
 use std::collections::HashMap;
 
-mod intcode {
-    include!("../intcode.rs");
+include!("../intcode.rs");
+
+fn opposite(dir: i64) -> i64 {
+    match dir {
+        1 => 2,
+        2 => 1,
+        3 => 4,
+        4 => 3,
+        _ => unreachable!(),
+    }
 }
-use intcode::*;
 
 struct Solver {
     interpreter: Interpreter,
-    spaces: HashMap<(i64, i64), i64>,
     distances: HashMap<(i64, i64), usize>,
     oxygen: Option<(i64, i64)>,
+    look_for: i64,
 }
 
 impl Solver {
-    fn solve(&mut self, distance: usize, x: i64, y: i64) {
+    fn solve(&mut self, distance: usize, x: i64, y: i64) -> Result<(), ()> {
         // Create an array of candidates
         let candidates = [(x, y - 1), (x, y + 1), (x - 1, y), (x + 1, y)];
 
-        // For each candidate
+        // For each candidate unexplored spot
         for (i, (x, y)) in candidates.iter().copied().enumerate() {
-            // If we have not visited yet
-            if self.spaces.contains_key(&(x, y)) {
+            // If we have not explored it yet
+            if self.distances.contains_key(&(x, y)) {
                 continue;
             }
 
@@ -29,73 +36,58 @@ impl Solver {
             self.interpreter.input.push_front(dir);
             self.interpreter.run();
 
-            // Get the robot's information about it and store it
+            // Get the robot's information about it
             let space = self.interpreter.output.pop_front().unwrap();
-            self.spaces.insert((x, y), space);
             self.distances.insert((x, y), distance + 1);
 
-            // If we couldn't move there, just go on to the next candidate
+            // If we couldn't move there, move on
             if space == 0 {
                 continue;
             }
 
-            // If it was the oxygen system, save its position
-            if space == 2 {
+            // Otherwise, if it was the oxygen system, save its position
+            if space == self.look_for {
                 self.oxygen = Some((x, y));
+                return Err(());
             }
 
-            self.solve(distance + 1, x, y);
+            // And keep on exploring from there
+            self.solve(distance + 1, x, y)?;
 
             // After we've explored that point fully, tell the bot to move back to the original
             // position and continue with the next candidate
-            self.interpreter.input.push_front(match dir {
-                1 => 2,
-                2 => 1,
-                3 => 4,
-                4 => 3,
-                _ => unreachable!(),
-            });
+            self.interpreter.input.push_front(opposite(dir));
             self.interpreter.run();
             assert_ne!(self.interpreter.output.pop_front(), Some(0));
         }
+
+        Ok(())
     }
-}
-
-fn fills_in((x, y): (i64, i64), spaces: &mut HashMap<(i64, i64), i64>) -> usize {
-    let mut result = 0;
-
-    let candidates = [(x, y - 1), (x, y + 1), (x - 1, y), (x + 1, y)];
-    for (x, y) in candidates.iter().copied() {
-        if let Some(1) = spaces.remove(&(x, y)) {
-            result = std::cmp::max(result, 1 + fills_in((x, y), spaces))
-        }
-    }
-
-    result
 }
 
 fn main() {
     let program = load_program(include_str!("input.txt"));
     let interpreter = Interpreter::new(program);
 
-    let mut spaces = HashMap::new();
-    spaces.insert((0, 0), 1);
-
+    // Initialize our solver and set it to look for the oxygen
     let mut solver = Solver {
-        spaces,
         interpreter,
-        distances: Default::default(),
+        distances: HashMap::new(),
         oxygen: None,
+        look_for: 2,
     };
-    solver.solve(0, 0, 0);
+    solver.solve(0, 0, 0).unwrap_err();
 
-    println!(
-        "{}",
-        solver
-            .distances
-            .get(solver.oxygen.as_ref().unwrap())
-            .unwrap()
-    );
+    // Print out the solution to part1 by getting the distance from the start to the oxygen
+    let oxygen = solver.oxygen.take().unwrap();
+    println!("{}", solver.distances.get(&oxygen).unwrap());
 
-    println!("{}", fills_in(solver.oxygen.unwrap(), &mut solver.spaces));
+    // Now, reset the information, make the drone aimless and make it wander around until we've
+    // explored everything
+    solver.distances.clear();
+    solver.look_for = -1;
+    solver.solve(0, oxygen.0, oxygen.1).unwrap();
+
+    // Get the solution to part2 by figuring out the farthest point from the start
+    println!("{}", solver.distances.values().max().unwrap() - 1);
 }
