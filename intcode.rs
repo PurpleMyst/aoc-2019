@@ -264,3 +264,7 @@ pub fn load_program(input: &str) -> Vec<Cell> {
 pub fn from_ascii<'a>(input: &'a str) -> impl Iterator<Item = i64> + 'a {
     input.bytes().map(|c| c as i64)
 }
+
+pub fn to_ascii(input: impl IntoIterator<Item = i64>) -> impl Iterator<Item = char> {
+    input.into_iter().map(|c| c as u8 as char)
+}
