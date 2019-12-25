@@ -8,7 +8,7 @@ fn main() {
         let mut interpreter = Interpreter::new(program.clone());
         interpreter
             .input
-            .extend(include_str!("springscript1.txt").bytes().map(|c| c as i64));
+            .extend(from_ascii(include_str!("springscript1.txt")));
         interpreter.run();
         *interpreter.output.back().unwrap()
     };
@@ -17,7 +17,7 @@ fn main() {
         let mut interpreter = Interpreter::new(program);
         interpreter
             .input
-            .extend(include_str!("springscript2.txt").bytes().map(|c| c as i64));
+            .extend(from_ascii(include_str!("springscript2.txt")));
         interpreter.run();
         *interpreter.output.back().unwrap()
     };

@@ -260,3 +260,7 @@ pub fn load_program(input: &str) -> Vec<Cell> {
         .map(|n| Cell::Value(n.parse().unwrap()))
         .collect()
 }
+
+pub fn from_ascii<'a>(input: &'a str) -> impl Iterator<Item = i64> + 'a {
+    input.bytes().map(|c| c as i64)
+}
