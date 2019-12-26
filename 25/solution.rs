@@ -156,7 +156,7 @@ fn is_safe(item: &str) -> bool {
 struct Droid {
     visited_rooms: HashSet<String>,
     interpreter: Interpreter,
-    items: HashSet<String>,
+    items: Vec<String>,
 }
 
 impl Droid {
@@ -164,30 +164,24 @@ impl Droid {
         Self {
             interpreter,
             visited_rooms: HashSet::new(),
-            items: HashSet::new(),
+            items: Vec::new(),
         }
     }
 
-    fn take(&mut self, item: String) {
+    fn take(&mut self, idx: usize) {
         self.interpreter.input.extend(from_ascii("take "));
-        self.interpreter.input.extend(from_ascii(&item));
+        self.interpreter.input.extend(from_ascii(&self.items[idx]));
         self.interpreter.input.push_back(NL);
         self.interpreter.run();
         self.interpreter.output.clear();
-
-        self.items.insert(item);
     }
 
-    fn drop(&mut self, item: &str) -> String {
+    fn drop(&mut self, idx: usize) {
         self.interpreter.input.extend(from_ascii("drop "));
-        self.interpreter.input.extend(from_ascii(item));
+        self.interpreter.input.extend(from_ascii(&self.items[idx]));
         self.interpreter.input.push_back(NL);
         self.interpreter.run();
         self.interpreter.output.clear();
-
-        self.items
-            .take(item)
-            .expect("dropped an item we didn't have")
     }
 
     fn enter(&mut self, door: Door) {
@@ -208,11 +202,12 @@ impl Droid {
         }
 
         // Take every item we can
-        items
-            .iter()
-            .filter(|item| is_safe(item))
-            .cloned()
-            .for_each(|item| self.take(item));
+        for item in items {
+            if is_safe(&item) {
+                self.items.push(item);
+                self.take(self.items.len() - 1);
+            }
+        }
 
         // Visit every possible room
         for door in doors.iter().copied() {
@@ -255,7 +250,7 @@ fn analyse(output: &VecDeque<i64>) -> Weight {
 
 fn main() {
     let mut program = load_program(include_str!("input.txt"));
-    program.extend_from_slice(&[Cell::Value(0); 1000]);
+    program.extend_from_slice(&[Cell::Value(0); 225]);
     let mut interpreter = Interpreter::new(program);
 
     interpreter.run();
@@ -274,19 +269,13 @@ fn main() {
     // Remove all the useless output
     droid.interpreter.output.clear();
 
-    // Drop everything the droid is currently holding
-    let mut floor: Vec<_> = droid
-        .items
-        .clone()
-        .iter()
-        .map(|item| droid.drop(item))
-        .collect();
+    // Drop all known items
+    (0..droid.items.len()).for_each(|item| droid.drop(item));
 
-    // For every item on the floor
-    for i in (0..floor.len()).rev() {
+    // For all items, iterated in reverse so that we can remove
+    for item in (0..droid.items.len()).rev() {
         // Get the item from the floor
-        let item = floor.remove(i);
-        droid.take(item.clone());
+        droid.take(item);
 
         // Enter the pressure-sensitive room
         droid.enter(Door::West);
@@ -294,22 +283,20 @@ fn main() {
         droid.interpreter.output.clear();
 
         // Drop the item
-        droid.drop(&item);
+        droid.drop(item);
 
-        // If the item doesn't make us too heavy even without anything else, add it back to the
-        // floor vector. Otherwise just pretend it doesn't exist.
-        if weight == Weight::TooLight {
-            floor.push(item);
+        // If the item makes us too heavy on its own, remove it from consideration
+        if weight == Weight::TooHeavy {
+            droid.items.remove(item);
         }
     }
 
     // Pick everything back up
-    floor.into_iter().for_each(|item| droid.take(item));
+    (0..droid.items.len()).for_each(|item| droid.take(item));
 
-    let mut optional = Vec::with_capacity(droid.items.len());
-    for item in droid.items.clone() {
+    for item in (0..droid.items.len()).rev() {
         // Drop just one item at a time
-        let item_copy = droid.drop(&item);
+        droid.drop(item);
 
         // Analyse our weight with everything but that item
         droid.enter(Door::West);
@@ -317,23 +304,21 @@ fn main() {
         droid.interpreter.output.clear();
 
         // Pick it back up
-        droid.take(item_copy);
+        droid.take(item);
 
-        // If we're not too light without the item, the item is not necessarily required to have
-        // the correct weight
-        if weight != Weight::TooLight {
-            optional.push(item);
+        // If we're too light without the item, we need the item to reach the target weight, so
+        // just always keep it and never drop it again
+        if weight == Weight::TooLight {
+            droid.items.remove(item);
         }
     }
 
     // Now, armed with our knowledge of what we mustn't drop ...
-    let mut floor = Vec::with_capacity(optional.len());
-
     // Check every possible item set, dropping some of the optional items every time
-    for i in 0u8..(1 << optional.len()) {
-        for j in 0..optional.len() {
-            if i & (1 << j) != 0 {
-                floor.push(droid.drop(&optional[j]));
+    for i in 0u8..(1 << droid.items.len()) {
+        for item in 0..droid.items.len() {
+            if i & (1 << item) != 0 {
+                droid.drop(item);
             }
         }
 
@@ -351,6 +336,10 @@ fn main() {
         droid.interpreter.output.clear();
 
         // Otherwise, pick everything back up and try again
-        floor.drain(..).for_each(|item| droid.take(item));
+        for item in 0..droid.items.len() {
+            if i & (1 << item) != 0 {
+                droid.take(item);
+            }
+        }
     }
 }
