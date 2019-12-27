@@ -1,7 +1,7 @@
 #!/usr/bin/env zsh
 
 for f (*/*.rs); do
-    rustc -C 'opt-level=3' $f -o ${f:r} &
+    rustc -C "opt-level=${1:-3}" $f -o ${f:r} &
 done
 
 wait
