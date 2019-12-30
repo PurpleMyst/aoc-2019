@@ -1,7 +1,9 @@
 #!/usr/bin/env zsh
 
+setopt ERR_EXIT NO_UNSET PIPE_FAIL
+
 for f (*/solution.rs); do
-    rustc -C 'opt-level=3' $f -o ${f:r} &
+    rustc -C opt-level=3 $f -o ${f:r} &
 done
 
 wait
