@@ -1,21 +1,19 @@
 use std::cmp::min;
 
-// TODO: minimize the sizes of the integers used here; that could potentially help with cache
-
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 struct HorizontalSegment {
-    x: isize,
-    y: isize,
-    length: isize,
-    idx: isize,
+    x: i32,
+    y: i32,
+    length: i32,
+    idx: i32,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 struct VerticalSegment {
-    x: isize,
-    y: isize,
-    length: isize,
-    idx: isize,
+    x: i32,
+    y: i32,
+    length: i32,
+    idx: i32,
 }
 
 fn points(path: &str) -> (Vec<HorizontalSegment>, Vec<VerticalSegment>) {
@@ -30,7 +28,7 @@ fn points(path: &str) -> (Vec<HorizontalSegment>, Vec<VerticalSegment>) {
         let mut step = step.chars();
 
         let direction: char = step.next().unwrap();
-        let length: isize = step.as_str().parse().unwrap();
+        let length: i32 = step.as_str().parse().unwrap();
 
         match direction {
             'U' => {
@@ -72,52 +70,52 @@ fn points(path: &str) -> (Vec<HorizontalSegment>, Vec<VerticalSegment>) {
     (horizontal, vertical)
 }
 
-fn intersect_1d(l: isize, h: isize, x: isize) -> bool {
+fn intersect_1d(l: i32, h: i32, x: i32) -> bool {
     (x >= l && x <= h) || (x >= h && x <= l)
 }
 
-fn intersect(hor: HorizontalSegment, vert: VerticalSegment) -> Option<(isize, isize)> {
-    if intersect_1d(hor.x, hor.x + hor.length, vert.x)
-        && intersect_1d(vert.y, vert.y + vert.length, hor.y)
+fn intersect(horizontal: HorizontalSegment, vertical: VerticalSegment) -> Option<(i32, i32)> {
+    if intersect_1d(horizontal.x, horizontal.x + horizontal.length, vertical.x)
+        && intersect_1d(vertical.y, vertical.y + vertical.length, horizontal.y)
     {
-        Some((vert.x, hor.y))
+        Some((vertical.x, horizontal.y))
     } else {
         None
     }
 }
 
+fn solve(horizontal: Vec<HorizontalSegment>, vertical: Vec<VerticalSegment>) -> (i32, i32) {
+    let mut part1 = std::i32::MAX;
+    let mut part2 = std::i32::MAX;
+
+    for horizontal in horizontal {
+        for &vertical in &vertical {
+            if let Some((x, y)) = intersect(horizontal, vertical) {
+                if (x, y) != (0, 0) {
+                    part1 = min(part1, x.abs() + y.abs());
+
+                    let steps1 = horizontal.idx + (y - vertical.y).abs();
+                    let steps2 = vertical.idx + (x - horizontal.x).abs();
+                    part2 = min(part2, steps1 + steps2);
+
+                    break;
+                }
+            }
+        }
+    }
+
+    (part1, part2)
+}
+
 fn main() {
     let mut wires = include_str!("input.txt").trim().lines().map(points);
 
-    let (wire1_hor, wire1_vert) = wires.next().unwrap();
-    let (wire2_hor, wire2_vert) = wires.next().unwrap();
+    let (wire1_horizontal, wire1_vertical) = wires.next().unwrap();
+    let (wire2_horizontal, wire2_vertical) = wires.next().unwrap();
 
-    let mut part1 = 10_000;
-    let mut part2 = 10_000_000;
+    let (part1_1, part2_1) = solve(wire1_horizontal, wire2_vertical);
+    let (part1_2, part2_2) = solve(wire2_horizontal, wire1_vertical);
 
-    macro_rules! doit {
-        ($hor:expr; $vert:expr) => {
-            for hor in $hor.iter().copied() {
-                for vert in $vert.iter().copied() {
-                    if let Some((x, y)) = intersect(hor, vert) {
-                        if (x, y) != (0, 0) {
-                            part1 = min(part1, x.abs() + y.abs());
-
-                            let steps1 = hor.idx + (y - vert.y).abs();
-                            let steps2 = vert.idx + (x - hor.x).abs();
-                            part2 = min(part2, steps1 + steps2);
-
-                            break;
-                        }
-                    }
-                }
-            }
-        };
-    }
-
-    doit!(wire1_hor; wire2_vert);
-    doit!(wire2_hor; wire1_vert);
-
-    println!("{}", part1);
-    println!("{}", part2);
+    println!("{}", min(part1_1, part1_2));
+    println!("{}", min(part2_1, part2_2));
 }
