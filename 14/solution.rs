@@ -4,14 +4,14 @@ type Ingredient<'a> = (usize, &'a str);
 type Reaction<'a> = (&'a str, (usize, Vec<Ingredient<'a>>));
 
 fn parse_ingredient(product_per_recipe: &str) -> Ingredient {
-    let mut splat = product_per_recipe.split(' ');
-    let n = splat.next().unwrap().parse::<usize>().unwrap();
+    let mut splat = product_per_recipe.splitn(2, ' ');
+    let n = splat.next().unwrap().parse().unwrap();
     let product = splat.next().unwrap();
     (n, product)
 }
 
 fn parse_reaction(reaction: &str) -> Reaction {
-    let mut sides = reaction.split(" => ");
+    let mut sides = reaction.splitn(2, " => ");
 
     let lhs = sides
         .next()
@@ -48,28 +48,30 @@ impl<'a> Solver<'a> {
         }
 
         // We don't need to make what we already have
-        let needed = needed - self.had.get(product).map(Cell::get).unwrap_or(0);
+        let product_had = self.had.get(product).unwrap();
 
-        // Figure out how many the recipe makes
-        let (product_per_recipe, ingredients) = self.recipes.get(product).unwrap();
+        // If needed - product_had underflows we already have enough product
+        if let Some(needed) = needed.checked_sub(product_had.get()) {
+            // Figure out how many the recipe makes
+            let (product_per_recipe, ingredients) = self.recipes.get(product).unwrap();
 
-        // How many times do we need to run the recipe?
-        let recipes_made = (needed + (product_per_recipe - 1)) / product_per_recipe;
+            // How many times do we need to run the recipe?
+            let recipes_made = (needed + (product_per_recipe - 1)) / product_per_recipe;
 
-        for (needed, ingredient) in ingredients {
-            // Make it ...
-            self.make(ingredient, needed * recipes_made);
+            for &(needed, ingredient) in ingredients {
+                // Make it ...
+                self.make(ingredient, needed * recipes_made);
 
-            // ... and use it up
-            if *ingredient != "ORE" {
-                let cell = self.had.get(ingredient).unwrap();
-                cell.set(cell.get() - needed * recipes_made);
+                // ... and use it
+                if ingredient != "ORE" {
+                    let ingredient_had = self.had.get(ingredient).unwrap();
+                    ingredient_had.set(ingredient_had.get() - needed * recipes_made);
+                }
             }
-        }
 
-        // And produce the result
-        let cell = self.had.get(product).unwrap();
-        cell.set(cell.get() + recipes_made * product_per_recipe)
+            // And produce the result
+            product_had.set(product_had.get() + recipes_made * product_per_recipe)
+        }
     }
 }
 
@@ -81,7 +83,7 @@ fn main() {
 
     let solver = Solver::new(&recipes);
     solver.make("FUEL", 1);
-    println!("{:?}", solver.ore_cost.get());
+    println!("{}", solver.ore_cost.get());
 
     const HAVE_ORE: usize = 1_000_000_000_000;
 
