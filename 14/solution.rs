@@ -1,16 +1,16 @@
 use std::{cell::Cell, collections::HashMap};
 
-type Ingredient<'a> = (usize, &'a str);
-type Reaction<'a> = (&'a str, (usize, Vec<Ingredient<'a>>));
+type Ingredient = (usize, &'static str);
+type Reaction = (&'static str, (usize, Vec<Ingredient>));
 
-fn parse_ingredient(product_per_recipe: &str) -> Ingredient {
+fn parse_ingredient(product_per_recipe: &'static str) -> Ingredient {
     let mut splat = product_per_recipe.splitn(2, ' ');
     let n = splat.next().unwrap().parse().unwrap();
     let product = splat.next().unwrap();
     (n, product)
 }
 
-fn parse_reaction(reaction: &str) -> Reaction {
+fn parse_reaction(reaction: &'static str) -> Reaction {
     let mut sides = reaction.splitn(2, " => ");
 
     let lhs = sides
@@ -26,13 +26,13 @@ fn parse_reaction(reaction: &str) -> Reaction {
 }
 
 struct Solver<'a> {
-    recipes: &'a HashMap<&'a str, (usize, Vec<Ingredient<'a>>)>,
-    had: HashMap<&'a str, Cell<usize>>,
+    recipes: &'a HashMap<&'static str, (usize, Vec<Ingredient>)>,
+    had: HashMap<&'static str, Cell<usize>>,
     ore_cost: Cell<usize>,
 }
 
 impl<'a> Solver<'a> {
-    fn new(recipes: &'a HashMap<&'a str, (usize, Vec<Ingredient<'a>>)>) -> Self {
+    fn new(recipes: &'a HashMap<&'static str, (usize, Vec<Ingredient>)>) -> Self {
         Self {
             had: recipes.keys().map(|key| (*key, Cell::default())).collect(),
             ore_cost: Cell::default(),
@@ -40,7 +40,7 @@ impl<'a> Solver<'a> {
         }
     }
 
-    fn make(&self, product: &'a str, needed: usize) {
+    fn make(&self, product: &'static str, needed: usize) {
         // If we're making ORE, we just need to keep track of how much we need
         if product == "ORE" {
             self.ore_cost.set(self.ore_cost.get() + needed);
