@@ -1,28 +1,34 @@
 use std::{
-    collections::HashSet,
+    collections::{BinaryHeap, HashMap},
     f64::consts::{FRAC_PI_2, PI},
+    hash::{Hash, Hasher},
+    hint::unreachable_unchecked,
+    iter::FromIterator,
 };
 
-#[derive(PartialEq, Eq, Hash, Debug, Clone, Copy)]
-struct Fraction(i64, i64);
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct OrderedFloat(f64);
 
-fn gcd(a: i64, b: i64) -> i64 {
-    if b == 0 {
-        a
-    } else {
-        gcd(b, a % b)
+impl Eq for OrderedFloat {}
+
+impl PartialOrd for OrderedFloat {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
     }
 }
 
-impl Fraction {
-    fn simplify(&mut self) {
-        if self.0 == 0 && self.1 == 0 {
-            return;
+impl Ord for OrderedFloat {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        match self.0.partial_cmp(&other.0) {
+            Some(ordering) => ordering,
+            None => unsafe { unreachable_unchecked() },
         }
+    }
+}
 
-        let d = gcd(self.0.abs(), self.1.abs());
-        self.0 /= d;
-        self.1 /= d;
+impl Hash for OrderedFloat {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.0.to_bits().hash(state)
     }
 }
 
@@ -38,7 +44,7 @@ fn angle_between((x1, y1): (i64, i64), (x2, y2): (i64, i64)) -> f64 {
 }
 
 fn main() {
-    let mut asteroids = include_str!("input.txt")
+    let asteroids = include_str!("input.txt")
         .lines()
         .enumerate()
         .flat_map(|(y, row)| {
@@ -53,56 +59,28 @@ fn main() {
         })
         .collect::<Vec<_>>();
 
-    // To find the monitoring station, count the number of unique slopes around each point and find
-    // the asteroid with the most.
-    let (part1, i) = asteroids
+    // Find the asteroid with the most unique angles around it. We only care about the last one of
+    // the group because part 1's answer is always greater than 200
+    let angles = asteroids
         .iter()
-        .enumerate()
-        .map(|(i, (x1, y1))| {
-            (
-                asteroids[..i]
-                    .iter()
-                    .copied()
-                    .chain(asteroids[i + 1..].iter().copied())
-                    .map(|(x2, y2)| {
-                        let mut slope = Fraction(y2 - y1, x2 - x1);
-                        slope.simplify();
-                        slope
-                    })
-                    .collect::<HashSet<_>>()
-                    .len(),
-                i,
-            )
+        .copied()
+        .map(|station| {
+            asteroids
+                .iter()
+                .copied()
+                .map(|asteroid| (OrderedFloat(angle_between(station, asteroid)), asteroid))
+                .collect::<HashMap<OrderedFloat, (i64, i64)>>()
         })
-        .max()
+        .max_by_key(|map| map.len())
         .unwrap();
 
-    println!("{}", part1);
+    // The answer to part 1 is the length of the map
+    println!("{}", angles.len());
 
-    let station = asteroids.remove(i);
+    // Sort the map by angle to get everything in destruction order
+    let map = BinaryHeap::from_iter(angles);
 
-    // Construct a list of targets grouped by angle
-    let mut targets: Vec<(f64, Vec<(i64, i64)>)> = vec![];
-    for asteroid in asteroids {
-        let alpha = angle_between(station, asteroid);
-
-        match targets.binary_search_by(|(beta, _)| alpha.partial_cmp(beta).unwrap()) {
-            Ok(idx) => targets[idx].1.push(asteroid),
-            Err(idx) => targets.insert(idx, (alpha, vec![asteroid])),
-        }
-    }
-    targets.reverse();
-
-    // Iterate through the targets list multiple times, only removing one per group per iteration
-    let mut vaporized = 0;
-    loop {
-        for (_, group) in &mut targets {
-            let (x, y) = group.pop().unwrap();
-            vaporized += 1;
-            if vaporized == 200 {
-                println!("{}", 100 * x - y);
-                return;
-            }
-        }
-    }
+    // The 200th element to be pulled out of the heap is our part 2 answer
+    let (_, (x, y)) = map.into_sorted_vec()[199];
+    println!("{}", 100 * x - y);
 }
