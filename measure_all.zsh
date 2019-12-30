@@ -2,6 +2,11 @@
 
 setopt ERR_EXIT NO_UNSET PIPE_FAIL
 
+cleanup() {
+    rm all.rs all
+}
+trap cleanup EXIT
+
 printf '' > all.rs
 
 for f (*/solution.rs); do
@@ -16,8 +21,6 @@ for f (*/*.rs); do
 done
 printf '}\n' >> all.rs
 
-rustc --allow dead_code -C opt-level=${1:-3} -C target-cpu=native all.rs -o all
+rustc --allow dead_code -C opt-level=${1:-3} -C panic=abort -C target-cpu=native all.rs -o all
 
 hyperfine ./all
-
-rm all.rs all

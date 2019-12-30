@@ -117,7 +117,7 @@ impl Interpreter {
                 match $mode {
                     ParameterMode::Position => i64::from($cell),
                     ParameterMode::Relative => i64::from($cell) + self.relative_base,
-                    ParameterMode::Immediate => unreachable!(),
+                    ParameterMode::Immediate => unsafe { std::hint::unreachable_unchecked() },
                 }
             }};
         }
