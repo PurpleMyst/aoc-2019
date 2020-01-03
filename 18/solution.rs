@@ -1,5 +1,9 @@
 use std::{cmp::Ordering, collections::*};
 
+// TODO: treat the four quadrants like a tree and use the corners as a hub
+// distance between two keys in the same quadrant can be found with LCA
+// distance between other keys is `dist(key1, corner1) + dist(corner1, corner2) + dist(corner2, key2)
+
 const EMPTY: u8 = b'.';
 const ENTRANCE: u8 = b'@';
 

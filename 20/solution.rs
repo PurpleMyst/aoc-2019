@@ -1,15 +1,15 @@
 use std::{
     cmp::Reverse,
     collections::{hash_map::Entry, BinaryHeap, HashMap, HashSet},
+    iter::once,
 };
+
+type Point = (u8, u8);
 
 const UPPER_EDGE: u8 = 2;
 const LOWER_EDGE: u8 = 122;
 const LEFT_EDGE: u8 = 2;
 const RIGHT_EDGE: u8 = 126;
-
-type Point2D = (u8, u8);
-type Point3D = (u8, u8, i16);
 
 macro_rules! neighbors {
     ($position:expr) => {{
@@ -26,42 +26,67 @@ macro_rules! neighbors {
     }};
 }
 
-fn heuristic(d: i16) -> i16 {
-    (d + 1) * (125 / 2)
+// (X1, Y1) -> [(DISTANCE, DEPTH_CHANGE, (X2, Y2))]
+type Graph = HashMap<Point, Vec<(i16, i16, Point)>>;
+
+fn make_graph(
+    empty: &HashSet<Point>,
+    labels: &HashMap<Point, Point>,
+    start: Point,
+    end: Point,
+    depth_change: impl Fn(Point) -> i16,
+) -> Graph {
+    let mut stack = Vec::with_capacity(labels.len() / 2);
+    let mut visited = HashSet::with_capacity(empty.len());
+
+    labels
+        .keys()
+        .copied()
+        .chain(once(start))
+        .chain(once(end))
+        .map(|label| {
+            let mut neighbors = Vec::with_capacity(labels.len() / 2);
+
+            stack.clear();
+            stack.push((label, 0));
+            visited.clear();
+
+            while let Some((current, distance)) = stack.pop() {
+                if !visited.insert(current) {
+                    continue;
+                }
+
+                if current == end {
+                    neighbors.push((distance, 0, current));
+                    continue;
+                }
+
+                if let Some(&destination) = labels.get(&current) {
+                    neighbors.push((distance + 1, depth_change(current), destination));
+                }
+
+                stack.extend(
+                    neighbors!(current)
+                        .filter(|neighbor| empty.contains(neighbor))
+                        .map(|neighbor| (neighbor, distance + 1)),
+                )
+            }
+
+            (label, neighbors)
+        })
+        .collect()
 }
 
-fn pathfind(
-    empty: &HashSet<Point2D>,
-    portals: &HashMap<Point2D, Point2D>,
-    start: Point2D,
-    end: Point2D,
-    new_depth: impl Fn(Point2D) -> i16,
-) -> i16 {
+fn heuristic(d: i16) -> i16 {
+    (RIGHT_EDGE - LEFT_EDGE) as i16 * d
+}
+
+fn pathfind(graph: Graph, start: Point, end: Point) -> i16 {
     let mut open = BinaryHeap::new();
     open.push((Reverse(heuristic(0)), 0, (start.0, start.1, 0)));
 
     let mut gs = HashMap::new();
     gs.insert((start.0, start.1, 0), 0);
-
-    // (X, Y) -> ((X, Y, ΔZ), ΔG)
-    let graph: HashMap<Point2D, Vec<(Point3D, i16)>> = empty
-        .iter()
-        .map(|&(x, y)| {
-            (
-                (x, y),
-                neighbors!((x, y))
-                    .filter(|&(x, y)| empty.contains(&(x, y)))
-                    .map(|(x, y)| {
-                        portals
-                            .get(&(x, y))
-                            .copied()
-                            .map(|(x2, y2)| ((x2, y2, new_depth((x, y))), 2))
-                            .unwrap_or(((x, y, 0), 1))
-                    })
-                    .collect(),
-            )
-        })
-        .collect();
 
     while let Some((_, g, (x, y, d))) = open.pop() {
         if d == 0 && (x, y) == end {
@@ -72,7 +97,7 @@ fn pathfind(
             graph[&(x, y)]
                 .iter()
                 .copied()
-                .filter_map(|((x, y, dd), dg)| {
+                .filter_map(|(dg, dd, (x, y))| {
                     let d = d + dd;
                     let g = g + dg;
 
@@ -103,6 +128,18 @@ fn pathfind(
     unreachable!("could not find path");
 }
 
+fn is_outer((x, y): Point) -> bool {
+    x == LEFT_EDGE || x == RIGHT_EDGE || y == UPPER_EDGE || y == LOWER_EDGE
+}
+
+fn depth_change(label: Point) -> i16 {
+    if is_outer(label) {
+        -1
+    } else {
+        1
+    }
+}
+
 fn main() {
     let map = include_str!("input.txt")
         .lines()
@@ -113,10 +150,10 @@ fn main() {
                 .map(move |(x, c)| ((x as u8, y as u8), c))
         })
         .filter(|&(_, c)| c != b' ' && c != b'#')
-        .collect::<HashMap<Point2D, u8>>();
+        .collect::<HashMap<Point, u8>>();
 
-    let mut portals = HashMap::with_capacity(map.len());
-    let mut unpaired = HashMap::with_capacity(map.len());
+    let mut labels = HashMap::new();
+    let mut unpaired = HashMap::new();
 
     map.iter()
         .filter(|(_, c)| c.is_ascii_uppercase())
@@ -142,12 +179,11 @@ fn main() {
                 None
             }
         })
-        .for_each(|(pos1, portal)| match unpaired.entry(portal) {
+        .for_each(|(pos1, label)| match unpaired.entry(label) {
             Entry::Occupied(entry) => {
                 let pos2 = entry.remove();
-                portals.reserve(2);
-                portals.insert(pos1, pos2);
-                portals.insert(pos2, pos1);
+                labels.insert(pos1, pos2);
+                labels.insert(pos2, pos1);
             }
 
             Entry::Vacant(entry) => {
@@ -158,23 +194,22 @@ fn main() {
     let empty = map
         .into_iter()
         .filter_map(|(pos, c)| if c == b'.' { Some(pos) } else { None })
-        .collect::<HashSet<Point2D>>();
+        .collect::<HashSet<Point>>();
 
     let start = unpaired.remove(&(b'A', b'A')).unwrap();
     let end = unpaired.remove(&(b'Z', b'Z')).unwrap();
 
-    println!("{}", pathfind(&empty, &portals, start, end, |_| 0));
+    println!(
+        "{}",
+        pathfind(make_graph(&empty, &labels, start, end, |_| 0), start, end)
+    );
 
     println!(
         "{}",
-        pathfind(&empty, &portals, start, end, |(x, y)| {
-            let outer = x == LEFT_EDGE || x == RIGHT_EDGE || y == UPPER_EDGE || y == LOWER_EDGE;
-
-            if outer {
-                -1
-            } else {
-                1
-            }
-        })
+        pathfind(
+            make_graph(&empty, &labels, start, end, depth_change),
+            start,
+            end
+        )
     );
 }
