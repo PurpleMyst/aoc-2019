@@ -1,8 +1,10 @@
+use intcode::Interpreter;
+
 fn main() {
-    let program = intcode::load_program(include_str!("input.txt"));
+    let interpreter = Interpreter::from_input(include_str!("input.txt"));
 
     let run = |input| {
-        let mut interpreter = intcode::Interpreter::new(program.clone());
+        let mut interpreter = interpreter.clone();
         interpreter.input.push_back(input);
         interpreter.run();
         interpreter.output.pop_back().unwrap()

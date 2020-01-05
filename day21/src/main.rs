@@ -1,23 +1,19 @@
-use intcode::*;
+use intcode::Interpreter;
 
 fn main() {
-    let mut program = load_program(include_str!("input.txt"));
-    program.extend_from_slice(&[Cell::Value(0); 2000]);
+    let mut interpreter = Interpreter::from_input(include_str!("input.txt"));
+    interpreter.memory.extend_from_slice(&[0; 2000]);
 
     let part1 = {
-        let mut interpreter = Interpreter::new(program.clone());
-        interpreter
-            .input
-            .extend(from_ascii(include_str!("springscript1.txt")));
+        let mut interpreter = interpreter.clone();
+        interpreter.input_from_ascii(include_str!("springscript1.txt"));
         interpreter.run();
         *interpreter.output.back().unwrap()
     };
 
     let part2 = {
-        let mut interpreter = Interpreter::new(program);
-        interpreter
-            .input
-            .extend(from_ascii(include_str!("springscript2.txt")));
+        let mut interpreter = interpreter.clone();
+        interpreter.input_from_ascii(include_str!("springscript2.txt"));
         interpreter.run();
         *interpreter.output.back().unwrap()
     };

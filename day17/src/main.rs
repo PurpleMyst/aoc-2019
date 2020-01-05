@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use intcode::*;
+use intcode::Interpreter;
 
 const MIN_ROUTINE_LEN: usize = 6;
 
@@ -98,11 +98,9 @@ fn path_len(path: &[Move]) -> usize {
 }
 
 fn main() {
-    let mut program = load_program(include_str!("input.txt"));
-    program.extend_from_slice(&[Cell::Value(0); 2000]);
-    program[0] = Cell::Value(2);
-
-    let mut interpreter = Interpreter::new(program);
+    let mut interpreter = Interpreter::from_input(include_str!("input.txt"));
+    interpreter.memory.extend_from_slice(&[0; 2000]);
+    interpreter.memory[0] = 2;
 
     interpreter.run();
 

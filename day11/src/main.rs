@@ -4,13 +4,11 @@ use std::{
     io::{self, Write},
 };
 
-use intcode::*;
+use intcode::Interpreter;
 
 const DIRECTIONS: [(i8, i8); 4] = [(0, -1), (1, 0), (0, 1), (-1, 0)];
 
-fn run(program: Vec<Cell>, colors: &mut HashMap<(i8, i8), bool>) {
-    let mut interpreter = Interpreter::new(program);
-
+fn run(mut interpreter: Interpreter, colors: &mut HashMap<(i8, i8), bool>) {
     let mut x = 0i8;
     let mut y = 0i8;
     let mut d = 0usize;
@@ -44,19 +42,19 @@ fn run(program: Vec<Cell>, colors: &mut HashMap<(i8, i8), bool>) {
 }
 
 fn main() {
-    let mut program = load_program(include_str!("input.txt"));
-    program.extend_from_slice(&[Cell::Value(0); 500]);
+    let mut interpreter = Interpreter::from_input(include_str!("input.txt"));
+    interpreter.memory.extend_from_slice(&[0; 500]);
 
     let mut colors = HashMap::new();
 
-    run(program.clone(), &mut colors);
+    run(interpreter.clone(), &mut colors);
 
     println!("{}", colors.len());
 
     colors.clear();
     colors.insert((0, 0), true);
 
-    run(program, &mut colors);
+    run(interpreter, &mut colors);
 
     let mut min_x = 0;
     let mut max_x = 0;

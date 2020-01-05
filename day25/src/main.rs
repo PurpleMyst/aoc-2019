@@ -1,6 +1,6 @@
 use std::collections::{HashSet, VecDeque};
 
-use intcode::*;
+use intcode::Interpreter;
 
 const NL: i64 = b'\n' as i64;
 
@@ -169,23 +169,23 @@ impl Droid {
     }
 
     fn take(&mut self, idx: usize) {
-        self.interpreter.input.extend(from_ascii("take "));
-        self.interpreter.input.extend(from_ascii(&self.items[idx]));
+        self.interpreter.input_from_ascii("take ");
+        self.interpreter.input_from_ascii(&self.items[idx]);
         self.interpreter.input.push_back(NL);
         self.interpreter.run();
         self.interpreter.output.clear();
     }
 
     fn drop(&mut self, idx: usize) {
-        self.interpreter.input.extend(from_ascii("drop "));
-        self.interpreter.input.extend(from_ascii(&self.items[idx]));
+        self.interpreter.input_from_ascii("drop ");
+        self.interpreter.input_from_ascii(&self.items[idx]);
         self.interpreter.input.push_back(NL);
         self.interpreter.run();
         self.interpreter.output.clear();
     }
 
     fn enter(&mut self, door: Door) {
-        self.interpreter.input.extend(from_ascii(door.into()));
+        self.interpreter.input_from_ascii(door.into());
         self.interpreter.input.push_back(NL);
         self.interpreter.run();
     }
@@ -236,8 +236,8 @@ enum Weight {
     JustRight,
 }
 
-fn analyse(output: &VecDeque<i64>) -> Weight {
-    let s = to_ascii(output.iter().copied()).collect::<String>();
+fn analyse(interpreter: &Interpreter) -> Weight {
+    let s = interpreter.output_as_ascii().collect::<String>();
 
     if s.contains("heavier") {
         Weight::TooLight
@@ -249,9 +249,8 @@ fn analyse(output: &VecDeque<i64>) -> Weight {
 }
 
 fn main() {
-    let mut program = load_program(include_str!("input.txt"));
-    program.extend_from_slice(&[Cell::Value(0); 225]);
-    let mut interpreter = Interpreter::new(program);
+    let mut interpreter = Interpreter::from_input(include_str!("input.txt"));
+    interpreter.memory.extend_from_slice(&[0; 225]);
 
     interpreter.run();
     let room = Room::parse(&mut interpreter.output);
@@ -279,7 +278,7 @@ fn main() {
 
         // Enter the pressure-sensitive room
         droid.enter(Door::West);
-        let weight = analyse(&droid.interpreter.output);
+        let weight = analyse(&droid.interpreter);
         droid.interpreter.output.clear();
 
         // Drop the item
@@ -300,7 +299,7 @@ fn main() {
 
         // Analyse our weight with everything but that item
         droid.enter(Door::West);
-        let weight = analyse(&droid.interpreter.output);
+        let weight = analyse(&droid.interpreter);
         droid.interpreter.output.clear();
 
         // Pick it back up
@@ -323,10 +322,12 @@ fn main() {
         }
 
         droid.enter(Door::West);
-        let weight = analyse(&droid.interpreter.output);
+        let weight = analyse(&droid.interpreter);
 
         if weight == Weight::JustRight {
-            to_ascii(droid.interpreter.output.into_iter())
+            droid
+                .interpreter
+                .output_as_ascii()
                 .skip_while(|&c| c != '"')
                 .for_each(|c| print!("{}", c));
 

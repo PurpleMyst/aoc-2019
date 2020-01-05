@@ -1,14 +1,14 @@
-use intcode::*;
+use intcode::Interpreter;
 
 type Phases = (i64, i64, i64, i64, i64);
 
-fn amplify(program: &Vec<Cell>, (a, b, c, d, e): Phases) -> i64 {
+fn amplify(interpreter: &Interpreter, (a, b, c, d, e): Phases) -> i64 {
     let mut interpreters = [
-        Interpreter::new(program.clone()),
-        Interpreter::new(program.clone()),
-        Interpreter::new(program.clone()),
-        Interpreter::new(program.clone()),
-        Interpreter::new(program.clone()),
+        interpreter.clone(),
+        interpreter.clone(),
+        interpreter.clone(),
+        interpreter.clone(),
+        interpreter.clone(),
     ];
 
     interpreters[0].input.push_back(a);
@@ -61,10 +61,10 @@ fn for_all_phases(left: i64, right: i64, mut f: impl FnMut(Phases) -> ()) {
     }
 }
 
-fn largest_output(program: &Vec<Cell>, low: i64, high: i64) -> i64 {
+fn largest_output(interpreter: &Interpreter, low: i64, high: i64) -> i64 {
     let mut result = 0;
     for_all_phases(low, high, |phases| {
-        let output = i64::from(amplify(&program, phases));
+        let output = i64::from(amplify(&interpreter, phases));
 
         if output > result {
             result = output;
@@ -74,9 +74,7 @@ fn largest_output(program: &Vec<Cell>, low: i64, high: i64) -> i64 {
 }
 
 fn main() {
-    let program = load_program(include_str!("input.txt"));
-
-    println!("{}", largest_output(&program, 0, 4));
-
-    println!("{}", largest_output(&program, 5, 9));
+    let interpreter = Interpreter::from_input(include_str!("input.txt"));
+    println!("{}", largest_output(&interpreter, 0, 4));
+    println!("{}", largest_output(&interpreter, 5, 9));
 }

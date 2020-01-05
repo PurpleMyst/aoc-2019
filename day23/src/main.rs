@@ -1,13 +1,13 @@
 const COMPUTERS: usize = 50;
 const NAT_ADDRESS: usize = 255;
 
-use intcode::*;
+use intcode::Interpreter;
 
 fn main() {
     use std::mem::{self, MaybeUninit};
 
-    let mut program = load_program(include_str!("input.txt"));
-    program.extend_from_slice(&[Cell::Value(0); 10]);
+    let mut interpreter = Interpreter::from_input(include_str!("input.txt"));
+    interpreter.memory.extend_from_slice(&[0; 10]);
 
     // To avoid having to allocate a vector on the heap, use a magic incantation to get a
     // stack-allocated array. Does this affect performance? Probably not. Did I want to do it for
@@ -17,7 +17,7 @@ fn main() {
             unsafe { MaybeUninit::uninit().assume_init() };
 
         computers.iter_mut().for_each(|elem| {
-            *elem = MaybeUninit::new(Interpreter::new(program.clone()));
+            *elem = MaybeUninit::new(interpreter.clone());
         });
 
         unsafe { mem::transmute::<_, [Interpreter; COMPUTERS]>(computers) }

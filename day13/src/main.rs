@@ -1,14 +1,14 @@
+use intcode::Interpreter;
+
 const BLOCK: i64 = 2;
 const BALL: i64 = 4;
 
-use intcode::*;
-
 fn main() {
-    let mut program = load_program(include_str!("input.txt"));
-    program.extend_from_slice(&[Cell::Value(0); 14]);
+    let mut interpreter = Interpreter::from_input(include_str!("input.txt"));
+    interpreter.memory.extend_from_slice(&[0; 14]);
 
     let part1 = {
-        let mut interpreter = Interpreter::new(program.clone());
+        let mut interpreter = interpreter.clone();
         interpreter.run();
 
         interpreter
@@ -27,9 +27,7 @@ fn main() {
     // ball x coordinate
     let mut b_x = p_x - 2;
 
-    program[0] = Cell::Value(2);
-
-    let mut interpreter = Interpreter::new(program);
+    interpreter.memory[0] = 2;
 
     let mut score = 0;
 

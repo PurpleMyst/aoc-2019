@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use intcode::*;
+use intcode::Interpreter;
 
 fn opposite(dir: i64) -> i64 {
     match dir {
@@ -44,7 +44,6 @@ impl Solver {
             if space == 0 {
                 continue;
             }
-
             // Otherwise, if it was the oxygen system, save its position
             if space == self.look_for {
                 self.oxygen = Some((x, y));
@@ -66,8 +65,7 @@ impl Solver {
 }
 
 fn main() {
-    let program = load_program(include_str!("input.txt"));
-    let interpreter = Interpreter::new(program);
+    let interpreter = Interpreter::from_input(include_str!("input.txt"));
 
     // Initialize our solver and set it to look for the oxygen
     let mut solver = Solver {
