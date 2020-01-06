@@ -1,7 +1,10 @@
-fn fft(signal: &[i64], idx: usize) -> i64 {
-    use std::cmp::min;
+use std::{cmp::min, mem::transmute};
 
-    let mut total: i64 = 0;
+const INPUT_LEN: usize = 650;
+const REPETITION: usize = 10_000;
+
+fn digit(signal: [i32; INPUT_LEN], idx: usize) -> i32 {
+    let mut total: i32 = 0;
 
     for i in (idx..signal.len()).step_by(4 * (idx + 1)) {
         for j in i..min(signal.len(), i + (idx + 1)) {
@@ -18,42 +21,60 @@ fn fft(signal: &[i64], idx: usize) -> i64 {
     total.abs() % 10
 }
 
-fn step(signal: &[i64]) -> Vec<i64> {
-    let mut next = signal.to_vec();
-    for i in 0..signal.len() {
-        next[i] = fft(signal, i);
+fn fft_part1(signal: [i32; INPUT_LEN]) -> [i32; INPUT_LEN] {
+    let mut next = [0; INPUT_LEN];
+    // We utilize `iter_mut().enumerate()` to avoid bounds checking
+    for (i, elem) in next.iter_mut().enumerate() {
+        *elem = digit(signal, i);
     }
     next
 }
 
-fn step2(signal: &mut [i64]) {
+// At sufficiently high values, namely when the index is greater than half of the signal length,
+// the above FFT function reduces to this
+fn fft_part2(signal: &mut [u32]) {
     let mut acc = 0;
 
-    signal.iter_mut().rev().for_each(|elem| {
-        acc = (acc + *elem) % 10;
-        *elem = acc;
-    });
+    for n in signal.iter_mut().rev() {
+        acc += *n;
+        *n = acc;
+    }
+
+    for n in signal.iter_mut() {
+        *n %= 10;
+    }
 }
 
 fn main() {
-    let mut signal_part1 = include_str!("input.txt")
-        .trim()
-        .bytes()
-        .map(|c| (c - b'0') as i64)
-        .collect::<Vec<_>>();
+    let mut signal = [0; INPUT_LEN];
 
-    let mut signal_part2 = signal_part1.clone();
-    (0..10000 - 1).for_each(|_| signal_part2.extend_from_slice(&signal_part1));
+    include_bytes!("input.txt")
+        .iter()
+        .copied()
+        .enumerate()
+        .for_each(|(i, c)| signal[i] = (c - b'0') as i32);
+
+    let offset = signal[..7]
+        .iter()
+        .fold(0usize, |acc, d| 10 * acc + (*d as usize));
+
+    // Transmuting &[i32] to &[u32] is perfectly safe because they have the same size
+    let unsigned_signal: &[u32] = unsafe { transmute(&signal[..]) };
+
+    // Calculate the first repetition which actually appears
+    // after the offset and copy starting from that to avoid superfluous copying.
+    let mut repeated_signal = Vec::with_capacity(INPUT_LEN * REPETITION - offset);
+    let mut it = (0..REPETITION).skip_while(|i| (i + 1) * INPUT_LEN < offset);
+    repeated_signal.extend_from_slice(&unsigned_signal[offset - it.next().unwrap() * INPUT_LEN..]);
+    it.for_each(|_| repeated_signal.extend_from_slice(unsigned_signal));
 
     // part 1
-    (0..100).for_each(|_| signal_part1 = step(&signal_part1[..]));
-    signal_part1[..8].iter().for_each(|c| print!("{}", c));
+    (0..100).for_each(|_| signal = fft_part1(signal));
+    signal[..8].iter().for_each(|c| print!("{}", c));
     println!();
 
     // part 2
-    let offset = signal_part2[..7].iter().fold(0, |acc, d| 10 * acc + d) as usize;
-    signal_part2.drain(..offset);
-    (0..100).for_each(|_| step2(&mut signal_part2));
-    signal_part2[..8].iter().for_each(|c| print!("{}", c));
+    (0..100).for_each(|_| fft_part2(&mut repeated_signal[..]));
+    repeated_signal[..8].iter().for_each(|c| print!("{}", c));
     println!();
 }
