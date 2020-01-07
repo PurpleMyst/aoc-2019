@@ -64,7 +64,7 @@ fn for_all_phases(left: i64, right: i64, mut f: impl FnMut(Phases) -> ()) {
 fn largest_output(interpreter: &Interpreter, low: i64, high: i64) -> i64 {
     let mut result = 0;
     for_all_phases(low, high, |phases| {
-        let output = i64::from(amplify(&interpreter, phases));
+        let output = amplify(&interpreter, phases);
 
         if output > result {
             result = output;

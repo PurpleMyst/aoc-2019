@@ -10,7 +10,7 @@ fn main() {
         interpreter.memory[1] = noun;
         interpreter.memory[2] = verb;
         interpreter.run();
-        i64::from(interpreter.memory[0])
+        interpreter.memory[0]
     };
 
     println!("{}", run(12, 2));
