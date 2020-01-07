@@ -1,30 +1,49 @@
-const DIMENSIONS: usize = 3;
+const MOONS: usize = 4;
 const STEPS: usize = 1000;
 
-#[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
-struct Moon {
-    position: [i64; DIMENSIONS],
-    velocity: [i64; DIMENSIONS],
-}
+fn simulate_axis(initial_positions: [i64; MOONS]) -> (([i64; MOONS], [i64; MOONS]), usize) {
+    let mut positions = initial_positions;
+    let mut velocities = [0; MOONS];
 
-impl Moon {
-    fn potential_energy(&self) -> i64 {
-        self.position.iter().copied().map(i64::abs).sum()
+    let mut part1 = (positions, velocities);
+
+    let mut n = 1;
+    'find_cycle: loop {
+        for i in 0..positions.len() {
+            for j in 0..i {
+                let delta = positions[i].cmp(&positions[j]) as i64;
+                velocities[i] -= delta;
+                velocities[j] += delta;
+            }
+        }
+
+        for i in 0..positions.len() {
+            positions[i] += velocities[i];
+        }
+
+        if n == STEPS {
+            part1 = (positions, velocities);
+        }
+
+        if (0..MOONS).all(|i| positions[i] == initial_positions[i] && velocities[i] == 0) {
+            break 'find_cycle;
+        }
+
+        n += 1;
     }
 
-    fn kinetic_energy(&self) -> i64 {
-        self.velocity.iter().copied().map(i64::abs).sum()
-    }
-
-    fn total_energy(&self) -> i64 {
-        self.potential_energy() * self.kinetic_energy()
-    }
+    (part1, n)
 }
 
 fn main() {
-    let mut moons = include_str!("input.txt")
+    let mut x_axis = [0; MOONS];
+    let mut y_axis = [0; MOONS];
+    let mut z_axis = [0; MOONS];
+
+    include_str!("input.txt")
         .lines()
-        .map(|line| {
+        .enumerate()
+        .for_each(|(i, line)| {
             let mut xyz = line[1..line.len() - 1]
                 .split(", ")
                 .map(|p| p[2..].parse().unwrap());
@@ -33,56 +52,21 @@ fn main() {
             let y = xyz.next().unwrap();
             let z = xyz.next().unwrap();
 
-            Moon {
-                position: [x, y, z],
-                velocity: [0; DIMENSIONS],
-            }
-        })
-        .collect::<Vec<_>>();
+            x_axis[i] = x;
+            y_axis[i] = y;
+            z_axis[i] = z;
+        });
 
-    let initial_moons = moons.clone();
+    let ((x, vx), x_cycle) = simulate_axis(x_axis);
+    let ((y, vy), y_cycle) = simulate_axis(y_axis);
+    let ((z, vz), z_cycle) = simulate_axis(z_axis);
 
-    let mut cycles = [0; DIMENSIONS];
-    let mut remaining = DIMENSIONS;
-
-    let mut step = 0;
-    while remaining != 0 {
-        if step == STEPS {
-            println!("{}", moons.iter().map(Moon::total_energy).sum::<i64>());
-        }
-
-        for k in 0..DIMENSIONS {
-            if cycles[k] != 0 {
-                continue;
-            }
-
-            for i in 0..moons.len() {
-                for j in 0..i {
-                    let delta = (moons[i].position[k] - moons[j].position[k]).signum();
-                    moons[i].velocity[k] -= delta;
-                    moons[j].velocity[k] += delta;
-                }
-            }
-
-            for i in 0..moons.len() {
-                moons[i].position[k] += moons[i].velocity[k];
-            }
-        }
-
-        step += 1;
-
-        for k in 0..DIMENSIONS {
-            if cycles[k] == 0
-                && (0..moons.len()).all(|i| {
-                    moons[i].position[k] == initial_moons[i].position[k]
-                        && moons[i].velocity[k] == 0
-                })
-            {
-                cycles[k] = step;
-                remaining -= 1;
-            }
-        }
-    }
-
-    println!("lcm {:?}", cycles);
+    println!(
+        "{}",
+        (0..MOONS)
+            .map(|i| (x[i].abs() + y[i].abs() + z[i].abs())
+                * (vx[i].abs() + vy[i].abs() + vz[i].abs()))
+            .sum::<i64>()
+    );
+    println!("lcm {} {} {}", x_cycle, y_cycle, z_cycle);
 }
