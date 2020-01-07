@@ -1,167 +1,73 @@
 use std::{cmp::Ordering, collections::*};
 
-// TODO: treat the four quadrants like a tree and use the corners as a hub
-// distance between two keys in the same quadrant can be found with LCA
-// distance between other keys is `dist(key1, corner1) + dist(corner1, corner2) + dist(corner2, key2)
-
 const EMPTY: u8 = b'.';
 const ENTRANCE: u8 = b'@';
 
-const KEYS: u32 = 26;
-
 type Point = (usize, usize);
 
-#[derive(PartialEq, Eq, Debug, Clone, Copy, Hash, Default)]
-struct Keys(u32);
+/// A Graph is a mapping from a Point to the states you can reach from it
+type Graph = HashMap<Point, Vec<State>>;
 
-fn key_to_idx(key: u8) -> u8 {
-    debug_assert!(key.is_ascii_lowercase());
-    key - b'a'
-}
+mod keys;
+use keys::{Keys, KEYS};
 
-impl Keys {
-    fn all() -> Self {
-        Self((1 << KEYS) - 1)
-    }
-
-    fn none() -> Self {
-        Self(0)
-    }
-
-    fn add(self, key: u8) -> Self {
-        Self(self.0 | (1 << key_to_idx(key)))
-    }
-
-    fn add_all(self, keys: Keys) -> Self {
-        Self(self.0 | keys.0)
-    }
-
-    fn remove(self, key: u8) -> Self {
-        Self(self.0 ^ (self.0 & (1 << key_to_idx(key))))
-    }
-
-    fn has_all(self, required: Self) -> bool {
-        self.0 & required.0 == required.0
-    }
-
-    fn count(self) -> u32 {
-        self.0.count_ones()
+fn abs_diff(a: usize, b: usize) -> usize {
+    if let Some(n) = a.checked_sub(b) {
+        n
+    } else {
+        b - a
     }
 }
 
-macro_rules! make_ord {
-    ($struct:ident => |$self:ident, $other:ident| $cmp:expr) => {
-        impl PartialEq for $struct {
-            fn eq(&self, other: &Self) -> bool {
-                self.cmp(other) == Ordering::Equal
-            }
-        }
-
-        impl Eq for $struct {}
-
-        impl PartialOrd for $struct {
-            fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-                Some(self.cmp(other))
-            }
-        }
-
-        impl Ord for $struct {
-            fn cmp(&self, $other: &Self) -> Ordering {
-                let $self = self;
-                $cmp
-            }
-        }
-    };
+fn manhattan((x1, y1): Point, (x2, y2): Point) -> usize {
+    abs_diff(x1, x2) + abs_diff(y1, y2)
 }
 
-#[derive(Clone, Copy, Debug, Hash)]
+#[derive(Hash, Clone, Copy, Debug)]
 struct State {
-    /// Where does this state leave you?
     position: Point,
-
-    /// How long is the path from the source node to the final position?
     distance: usize,
-
-    /// What keys does this state require?
-    keys_used: Keys,
-
-    /// What keys does this state pick up along the way?
     keys_gained: Keys,
+    keys_needed: Keys,
 }
 
-make_ord!(State => |this, other| {
-    this.keys_gained.count().cmp(&other.keys_gained.count())
-        .then(this.distance.cmp(&other.distance).reverse())
-});
-
-fn distance_to_keys(map: &HashMap<Point, u8>, source: Point) -> HashMap<u8, State> {
-    let mut result: HashMap<u8, State> = HashMap::with_capacity(KEYS as usize);
-
-    let mut states = BinaryHeap::with_capacity(map.len());
-
-    states.push(State {
-        position: source,
-        keys_used: Keys::none(),
-        keys_gained: Keys::none(),
-        distance: 0,
-    });
-
-    let mut visited = HashSet::with_capacity(map.len());
-    visited.insert(source);
-
-    while let Some(state) = states.pop() {
-        let (x, y) = state.position;
-        let candidates = [(x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)];
-
-        for &position in &candidates {
-            if !visited.insert(position) {
-                continue;
-            }
-
-            let mut next_state = State {
-                position,
-                distance: state.distance + 1,
-                ..state
-            };
-
-            match map.get(&position).copied() {
-                Some(EMPTY) => {}
-
-                // if we step on a key just be fine with it alright
-                Some(c @ b'a'..=b'z') => {
-                    next_state.keys_gained = next_state.keys_gained.add(c);
-                    result.insert(c, next_state);
-                }
-
-                // if we step on a door this path requires the key
-                Some(c @ b'A'..=b'Z') => {
-                    next_state.keys_used = next_state.keys_used.add(c.to_ascii_lowercase());
-                }
-
-                Some(..) => unsafe { std::hint::unreachable_unchecked() },
-
-                None => continue,
-            }
-
-            states.push(next_state);
-        }
+impl PartialEq for State {
+    fn eq(&self, other: &Self) -> bool {
+        self.cmp(other) == Ordering::Equal
     }
-
-    result
 }
 
-fn solve(map: &HashMap<Point, u8>, initial_position: Point, initial_keys: Keys) -> usize {
+impl Eq for State {}
+
+impl PartialOrd for State {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+// States are ordered so that the BinaryHeap in `solve` considers the best solutions first.
+// A state is considered "greater" than another if it has more keys gained or less steps taken.
+impl Ord for State {
+    fn cmp(&self, other: &Self) -> Ordering {
+        (self.keys_gained.count().cmp(&other.keys_gained.count()))
+            .then(self.distance.cmp(&other.distance).reverse())
+    }
+}
+
+/// Calculate the shortest path picking up all the keys
+fn solve(initial_position: Point, initial_keys: Keys, graph: HashMap<Point, Vec<State>>) -> usize {
+    // What states do we need to visit next? we utilize a BinaryHeap so that we find new solutions
+    // as fast as possible so that we can prune a lot of states with the `< solution` check below.
     let mut states: BinaryHeap<State> = BinaryHeap::new();
 
+    // What states have we already considered? There's no need to consider them again.
     let mut seen: HashSet<State> = HashSet::new();
-
-    let mut cache: HashMap<Point, HashMap<u8, State>> = HashMap::with_capacity(KEYS as usize);
 
     states.push(State {
         position: initial_position,
         distance: 0,
         keys_gained: initial_keys,
-        keys_used: Keys::none(),
+        keys_needed: Keys::none(),
     });
 
     let mut solution = std::usize::MAX;
@@ -171,27 +77,33 @@ fn solve(map: &HashMap<Point, u8>, initial_position: Point, initial_keys: Keys) 
             continue;
         }
 
-        if state.keys_gained.count() == KEYS {
+        if state.keys_gained.count() == 26 {
             solution = state.distance;
             continue;
         }
 
         states.extend(
-            (cache.entry(state.position))
-                .or_insert_with(|| distance_to_keys(&map, state.position))
-                .values()
-                // Only consider states that we can get to
-                .filter(|&next_state| state.keys_gained.has_all(next_state.keys_used))
-                // Only consider states that make us gain keys
-                .filter(|&next_state| !state.keys_gained.has_all(next_state.keys_gained))
-                // Only consider states that could potentially be a winner
-                .filter(|&next_state| (state.distance + next_state.distance) < solution)
-                // Combine the next state and the current state
-                .map(|next_state| State {
-                    position: next_state.position,
-                    distance: state.distance + next_state.distance,
-                    keys_used: Keys::none(),
-                    keys_gained: state.keys_gained.add_all(next_state.keys_gained),
+            graph
+                .get(&state.position)
+                .unwrap()
+                .iter()
+                .copied()
+                .filter_map(|next_state| {
+                    // Consider only states which we can reach, which give us new keys and which
+                    // aren't trivially worse than the best solution so far
+                    if state.keys_gained.has_all(next_state.keys_needed)
+                        && !state.keys_gained.has_all(next_state.keys_gained)
+                        && state.distance + next_state.distance < solution
+                    {
+                        Some(State {
+                            position: next_state.position,
+                            distance: state.distance + next_state.distance,
+                            keys_gained: state.keys_gained.add_all(next_state.keys_gained),
+                            keys_needed: Keys::none(),
+                        })
+                    } else {
+                        None
+                    }
                 }),
         );
     }
@@ -199,8 +111,129 @@ fn solve(map: &HashMap<Point, u8>, initial_position: Point, initial_keys: Keys) 
     solution
 }
 
+fn neighbors((x, y): Point) -> [Point; 4] {
+    [(x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)]
+}
+
+/// Create the Graph for a given quadrant
+fn build_graph(mut quadrant: HashMap<Point, u8>, entrance: Point) -> Graph {
+    // Remove the entrance from consideration
+    quadrant.remove(&entrance);
+
+    // Map points to what point comes before it in a breadth-first search
+    let mut parents = HashMap::with_capacity(quadrant.len());
+
+    // Pre-allocate the graph with enough capacity for all the keys and the entrance.
+    let mut graph: Graph = HashMap::with_capacity(KEYS as usize + 1);
+
+    graph.insert(entrance, Vec::with_capacity(KEYS as usize));
+
+    // Run a breadth-first search
+    let mut q = Vec::with_capacity(quadrant.len());
+    q.push(State {
+        position: entrance,
+        distance: 0,
+        keys_gained: Keys::none(),
+        keys_needed: Keys::none(),
+    });
+    while let Some(state) = q.pop() {
+        for &position in &neighbors(state.position) {
+            // We remove from the quadrant so that we only consider points once
+            if let Some(symbol) = quadrant.remove(&position) {
+                let mut next_state = State {
+                    distance: state.distance + 1,
+                    position,
+                    ..state
+                };
+
+                if symbol.is_ascii_lowercase() {
+                    // If this position is a key, the next state will gain that key
+                    next_state.keys_gained = next_state.keys_gained.add(symbol);
+                    // Add the key to the edges from the start
+                    graph.get_mut(&entrance).unwrap().push(next_state);
+                } else if symbol.is_ascii_uppercase() {
+                    // If this position is a door, to get to the next state we will to own its
+                    // corresponding key
+                    next_state.keys_needed = next_state.keys_needed.add(symbol.to_ascii_lowercase())
+                }
+
+                parents.insert(next_state.position, state.position);
+                q.push(next_state);
+            }
+        }
+    }
+
+    // Calculate parents from a point
+    let parents =
+        |point| std::iter::successors(Some(point), |p| parents.get(p).copied()).enumerate();
+
+    let all_keys = graph.get(&entrance).unwrap().clone();
+
+    // For all pairs of keys ...
+    for (i, state1) in all_keys.iter().copied().enumerate() {
+        for state2 in all_keys[i + 1..].iter().copied() {
+            let mut parents1 = parents(state1.position);
+            let parents2 = parents(state2.position);
+
+            let parents2 = parents2.map(|(d, p)| (p, d)).collect::<HashMap<_, _>>();
+
+            // The distance between two keys in the same quadrant is the sum of the distances from
+            // each key to their nearest common ancestor
+            let distance = parents1
+                .find_map(|(d, p)| Some(d + parents2.get(&p)?))
+                .unwrap();
+
+            let mut add_to_graph = |state1: State, state2: State| {
+                graph.entry(state1.position).or_default().push(State {
+                    position: state2.position,
+                    distance,
+                    keys_needed: state1.keys_needed.add_all(state2.keys_needed),
+                    keys_gained: state1.keys_gained.add_all(state2.keys_gained),
+                })
+            };
+
+            add_to_graph(state1, state2);
+            add_to_graph(state2, state1);
+        }
+    }
+
+    // Avoid considering states which are redundant:
+    // If from node A when can reach nodes B and C and reaching node C requires going through node
+    // B but not through any doors (that you haven't already gone through while reaching B), then
+    // there's no reason to consider the state (A -> B) because key C must be picked up anyways
+    for edges in graph.values_mut() {
+        // Group states by keys required to reach them
+        let mut groups: HashMap<Keys, Vec<State>> = Default::default();
+        edges
+            .iter()
+            .for_each(|&state| groups.entry(state.keys_needed).or_default().push(state));
+
+        let mut new_edges: HashSet<State> = HashSet::new();
+        for (_, mut group) in groups {
+            // For all nodes in the current group
+            for _ in 0..group.len() {
+                let node1 = group.remove(0);
+                new_edges.insert(node1);
+
+                // If any of the nodes not considered yet render this one redundant (as explained
+                // above), remove it from the new edges
+                for &node2 in &group {
+                    if node2.keys_gained.has_all(node1.keys_gained) {
+                        new_edges.remove(&node1);
+                        break;
+                    }
+                }
+            }
+        }
+
+        *edges = new_edges.into_iter().collect();
+    }
+
+    graph
+}
+
 fn main() {
-    let input = include_str!("input.txt")
+    let mut input = include_str!("input.txt")
         .lines()
         .enumerate()
         .flat_map(|(y, row)| {
@@ -210,65 +243,118 @@ fn main() {
                 .map(move |(x, c)| ((x, y), c))
         });
 
-    let mut map: HashMap<Point, u8> = Default::default();
+    // The problem input, but not any of the example inputs, can be divided into four quadrants
+    // which are perfect mazes. This allows us to exploit a few properties of perfect mazes, mainly
+    // that they are equivalent to a tree. This allows us to calculate distances between keys
+    // without requiring anything but BFS and simple arithmetic.
 
-    let mut initial_keys = Keys::all();
-
+    // Find the initial position, remembering all that we skip over
     let mut initial_position = (0, 0);
+    let mut unconsidered = Vec::new();
+    for ((x, y), c) in input.by_ref() {
+        unconsidered.push(((x, y), c));
 
-    for ((x, y), c) in input {
-        if c == EMPTY {
-            map.insert((x, y), EMPTY);
-        } else if c == ENTRANCE {
-            map.insert((x, y), EMPTY);
+        if c == ENTRANCE {
             initial_position = (x, y);
-        } else if c.is_ascii_lowercase() {
-            map.insert((x, y), c);
-            initial_keys = initial_keys.remove(c);
-        } else if c.is_ascii_uppercase() {
-            map.insert((x, y), c);
         }
     }
 
-    println!("{:?}", solve(&map, initial_position, initial_keys));
-
-    let mut quadrants = vec![(HashMap::new(), Keys::all()); 4];
-
-    for ((x, y), c) in map {
-        let i = match (x.cmp(&initial_position.0), y.cmp(&initial_position.1)) {
+    // Now divide everything else into quadrants
+    let mut quadrants = vec![HashMap::new(); 4];
+    let mut quadrant_initial_keys = vec![Keys::all(); 4];
+    let mut initial_keys = Keys::all();
+    for ((x, y), c) in unconsidered.into_iter().chain(input) {
+        let idx = match (x.cmp(&initial_position.0), y.cmp(&initial_position.1)) {
             (Ordering::Equal, _) | (_, Ordering::Equal) => continue,
             (Ordering::Less, Ordering::Less) => 0,
             (Ordering::Greater, Ordering::Less) => 1,
             (Ordering::Greater, Ordering::Greater) => 2,
             (Ordering::Less, Ordering::Greater) => 3,
         };
+        let quadrant = &mut quadrants[idx];
 
-        let (map, initial_keys) = &mut quadrants[i];
-        map.insert((x, y), c);
-        if c.is_ascii_lowercase() {
-            *initial_keys = initial_keys.remove(c);
+        if c == EMPTY {
+            quadrant.insert((x, y), EMPTY);
+        } else if c == ENTRANCE {
+            quadrant.insert((x, y), EMPTY);
+            initial_position = (x, y);
+        } else if c.is_ascii_lowercase() {
+            quadrant.insert((x, y), c);
+            initial_keys = initial_keys.remove(c);
+            quadrant_initial_keys[idx] = quadrant_initial_keys[idx].remove(c);
+        } else if c.is_ascii_uppercase() {
+            quadrant.insert((x, y), c);
         }
     }
 
-    println!(
-        "{}",
-        quadrants
-            .into_iter()
-            .enumerate()
-            .map(|(i, (map, initial_keys))| std::thread::spawn(move || {
-                let initial_position = match i {
-                    0 => (initial_position.0 - 1, initial_position.1 - 1),
-                    1 => (initial_position.0 + 1, initial_position.1 - 1),
-                    2 => (initial_position.0 + 1, initial_position.1 + 1),
-                    3 => (initial_position.0 - 1, initial_position.1 + 1),
-                    _ => unsafe { std::hint::unreachable_unchecked() },
-                };
+    let entrances = [
+        (initial_position.0 - 1, initial_position.1 - 1),
+        (initial_position.0 + 1, initial_position.1 - 1),
+        (initial_position.0 + 1, initial_position.1 + 1),
+        (initial_position.0 - 1, initial_position.1 + 1),
+    ];
 
-                solve(&map, initial_position, initial_keys)
-            }))
-            .collect::<Vec<_>>()
+    let mut graphs = quadrants
+        .into_iter()
+        .zip(entrances.iter().copied())
+        .map(|(quadrant, entrance)| (build_graph(quadrant, entrance), entrance))
+        .collect::<Vec<_>>();
+
+    let part2 = graphs
+        .clone()
+        .into_iter()
+        .zip(quadrant_initial_keys.into_iter())
+        .map(|((graph, entrance), initial_keys)| solve(entrance, initial_keys, graph))
+        .sum::<usize>();
+
+    let mut graph: Graph = HashMap::with_capacity(KEYS as usize + 1);
+
+    graph.insert(initial_position, Vec::with_capacity(KEYS as usize));
+
+    // For all pairs of quadrants
+    for _ in 0..graphs.len() {
+        let (mut graph1, entrance1) = graphs.remove(0);
+
+        graph.get_mut(&initial_position).unwrap().extend(
+            graph1.get(&entrance1).unwrap().iter().map(|&state| State {
+                distance: state.distance + manhattan(initial_position, entrance1),
+                ..state
+            }),
+        );
+
+        for (graph2, entrance2) in graphs.iter() {
+            // For each pair of keys in the two quadrants
+            for &state1 in graph1.get(&entrance1).unwrap().iter() {
+                for &state2 in graph2.get(&entrance2).unwrap().iter() {
+                    // The distance between two keys in two separate quadrants is the distance from
+                    // the first key to its entrance, plus the distance from the first key's
+                    // entrance to the second key's entrance, plus the distance from the second
+                    // key's entrance to the second key.
+                    let distance =
+                        state1.distance + manhattan(entrance1, *entrance2) + state2.distance;
+
+                    let mut add_to_graph = |state1: State, state2: State| {
+                        graph.entry(state1.position).or_default().push(State {
+                            position: state2.position,
+                            distance,
+                            keys_needed: state1.keys_needed.add_all(state2.keys_needed),
+                            keys_gained: state1.keys_gained.add_all(state2.keys_gained),
+                        })
+                    };
+
+                    add_to_graph(state1, state2);
+                    add_to_graph(state2, state1);
+                }
+            }
+        }
+
+        // Add all
+        graph1.remove(&entrance1);
+        graph1
             .into_iter()
-            .map(|handle| handle.join().unwrap())
-            .sum::<usize>()
-    );
+            .for_each(|(pos, states)| graph.entry(pos).or_default().extend(states));
+    }
+
+    println!("{}", solve(initial_position, initial_keys, graph));
+    println!("{}", part2);
 }
