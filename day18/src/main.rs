@@ -3,7 +3,7 @@ use std::{cmp::Ordering, collections::*};
 const EMPTY: u8 = b'.';
 const ENTRANCE: u8 = b'@';
 
-type Point = (usize, usize);
+type Point = (u16, u16);
 
 /// A Graph is a mapping from a Point to the states you can reach from it
 type Graph = HashMap<Point, Vec<State>>;
@@ -11,7 +11,7 @@ type Graph = HashMap<Point, Vec<State>>;
 mod keys;
 use keys::{Keys, KEYS};
 
-fn abs_diff(a: usize, b: usize) -> usize {
+fn abs_diff(a: u16, b: u16) -> u16 {
     if let Some(n) = a.checked_sub(b) {
         n
     } else {
@@ -19,14 +19,14 @@ fn abs_diff(a: usize, b: usize) -> usize {
     }
 }
 
-fn manhattan((x1, y1): Point, (x2, y2): Point) -> usize {
+fn manhattan((x1, y1): Point, (x2, y2): Point) -> u16 {
     abs_diff(x1, x2) + abs_diff(y1, y2)
 }
 
 #[derive(Hash, Clone, Copy, Debug)]
 struct State {
     position: Point,
-    distance: usize,
+    distance: u16,
     keys_gained: Keys,
     keys_needed: Keys,
 }
@@ -55,7 +55,7 @@ impl Ord for State {
 }
 
 /// Calculate the shortest path picking up all the keys
-fn solve(initial_position: Point, initial_keys: Keys, graph: HashMap<Point, Vec<State>>) -> usize {
+fn solve(initial_position: Point, initial_keys: Keys, graph: HashMap<Point, Vec<State>>) -> u16 {
     // What states do we need to visit next? we utilize a BinaryHeap so that we find new solutions
     // as fast as possible so that we can prune a lot of states with the `< solution` check below.
     let mut states: BinaryHeap<State> = BinaryHeap::new();
@@ -70,7 +70,7 @@ fn solve(initial_position: Point, initial_keys: Keys, graph: HashMap<Point, Vec<
         keys_needed: Keys::none(),
     });
 
-    let mut solution = std::usize::MAX;
+    let mut solution = std::u16::MAX;
 
     while let Some(state) = states.pop() {
         if !seen.insert(state) {
@@ -181,7 +181,7 @@ fn build_graph(mut quadrant: HashMap<Point, u8>, entrance: Point) -> Graph {
             // each key to their nearest common ancestor
             let distance = parents1
                 .find_map(|(d, p)| Some(d + parents2.get(&p)?))
-                .unwrap();
+                .unwrap() as u16;
 
             let mut add_to_graph = |state1: State, state2: State| {
                 graph.entry(state1.position).or_default().push(State {
@@ -240,7 +240,7 @@ fn main() {
             row.bytes()
                 .enumerate()
                 .filter(|&(_, c)| c != b'#')
-                .map(move |(x, c)| ((x, y), c))
+                .map(move |(x, c)| ((x as u16, y as u16), c))
         });
 
     // The problem input, but not any of the example inputs, can be divided into four quadrants
@@ -305,7 +305,7 @@ fn main() {
         .into_iter()
         .zip(quadrant_initial_keys.into_iter())
         .map(|((graph, entrance), initial_keys)| solve(entrance, initial_keys, graph))
-        .sum::<usize>();
+        .sum::<u16>();
 
     let mut graph: Graph = HashMap::with_capacity(KEYS as usize + 1);
 
