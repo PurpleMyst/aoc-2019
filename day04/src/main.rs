@@ -17,7 +17,7 @@ fn main() {
                 for d in c..=9 {
                     for e in d..=9 {
                         for f in e..=9 {
-                            let n = a * 100000 + b * 10000 + c * 1000 + d * 100 + e * 10 + f * 1;
+                            let n = a * 100_000 + b * 10000 + c * 1000 + d * 100 + e * 10 + f;
                             if n < low || n > high {
                                 continue;
                             }

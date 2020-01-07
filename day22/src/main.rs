@@ -81,7 +81,7 @@ fn get_input(m: i64) -> LCF {
             if line == "deal into new stack" {
                 LCF(-1, -1)
             } else {
-                let n = line.split(" ").last().unwrap().parse::<i64>().unwrap();
+                let n = line.split(' ').last().unwrap().parse::<i64>().unwrap();
 
                 if line.starts_with("cut") {
                     LCF(1, -n)

@@ -14,8 +14,12 @@ pub struct Interpreter {
     pub relative_base: i64,
 }
 
-type Opcode = fn(&mut Interpreter) -> ();
+type Opcode = fn(&mut Interpreter);
 
+// Map each opcode to a function applying its effects to the interpreter. The effects include
+// continuing execution, and so if an opcode function does not call `interpreter.run()` then
+// execution is paused. This is so that we don't need to use a call stack and can just jump around
+// from function to function.
 pub const JUMP_TABLE: [Option<Opcode>; 22209] = {
     let mut jump_table = [None; 22209];
 
@@ -106,7 +110,8 @@ pub const JUMP_TABLE: [Option<Opcode>; 22209] = {
         (@doit relative_mut) => { 2 };
     }
 
-    /// Add an opcode to the jump table with all of its corresponding mode combinations
+    /// Add an opcode to the jump table with all of its corresponding mode combinations and with
+    /// implicit continuation
     macro_rules! add_opcode {
         // triadic instruction which loads from first two arguments and stores into third
         ($opcode:literal => |$interpreter:ident, $a_var:ident, $b_var:ident, $c_var:ident| $body:expr) => {
@@ -174,12 +179,6 @@ pub const JUMP_TABLE: [Option<Opcode>; 22209] = {
 
             cartesian_product!(helper <- (absolute_mut relative_mut; absolute; absolute));
         };
-
-        // NB: No `interpreter.run()` is present after the $body because we use this just for 99
-        // nulladic instruction
-        ($opcode:literal => |$interpreter:ident| $body:expr) => {
-            jump_table[$opcode] = Some((|$interpreter| { $body }) as Opcode);
-        };
     }
 
     add_opcode!(1 => |interp, a, b, c| { *c = a + b });
@@ -192,7 +191,13 @@ pub const JUMP_TABLE: [Option<Opcode>; 22209] = {
     add_opcode!(8 => |interp, a, b, c| *c = if a == b { 1 } else { 0 });
     add_opcode!(9 => |interp, a| interp.relative_base += a);
 
-    add_opcode!(99 => |interp| { interp.pc -= 1; interp.done = true; return; });
+    // NB: since we're not using `add_opcode!` there is no implicit continuation
+    jump_table[99] = Some(
+        (|interp| {
+            interp.pc -= 1;
+            interp.done = true;
+        }) as Opcode,
+    );
 
     jump_table
 };

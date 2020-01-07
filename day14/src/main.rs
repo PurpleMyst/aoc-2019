@@ -1,4 +1,6 @@
-use std::{cell::Cell, collections::HashMap};
+use std::{cell::Cell, cmp::Ordering, collections::HashMap};
+
+const PART2_ORE: usize = 1_000_000_000_000;
 
 type Ingredient = (usize, &'static str);
 type Reaction = (&'static str, (usize, Vec<Ingredient>));
@@ -83,12 +85,14 @@ fn main() {
 
     let solver = Solver::new(&recipes);
     solver.make("FUEL", 1);
-    println!("{}", solver.ore_cost.get());
+    let part1 = solver.ore_cost.get();
+    println!("{}", part1);
 
-    const HAVE_ORE: usize = 1_000_000_000_000;
-
-    let mut l = 0;
-    let mut r = HAVE_ORE - 1;
+    // Part one represents the maximum cost for 1 FUEL because we started from scratch. Due to
+    // this, we can calculate a lower bound on the solution by considering how much we could make
+    // assuming we started from scratch every time
+    let mut l = PART2_ORE / part1;
+    let mut r = PART2_ORE;
 
     while l <= r {
         let fuel = (l + r) / 2;
@@ -96,12 +100,10 @@ fn main() {
         let solver = Solver::new(&recipes);
         solver.make("FUEL", fuel);
 
-        let ore = solver.ore_cost.get();
-
-        if ore < HAVE_ORE {
-            l = fuel + 1;
-        } else if ore > HAVE_ORE {
-            r = fuel - 1;
+        match solver.ore_cost.get().cmp(&PART2_ORE) {
+            Ordering::Less => l = fuel + 1,
+            Ordering::Greater => r = fuel - 1,
+            Ordering::Equal => break,
         }
     }
 

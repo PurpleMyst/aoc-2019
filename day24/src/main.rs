@@ -18,15 +18,15 @@ impl Layer {
         self.0 |= mask(point);
     }
 
-    fn get(&self, point: Point2D) -> bool {
+    fn get(self, point: Point2D) -> bool {
         self.0 & mask(point) != 0
     }
 
-    fn alive_in_mask(&self, mask: u32) -> u32 {
+    fn alive_in_mask(self, mask: u32) -> u32 {
         (self.0 & mask).count_ones()
     }
 
-    fn alive_total(&self) -> u32 {
+    fn alive_total(self) -> u32 {
         self.0.count_ones()
     }
 
