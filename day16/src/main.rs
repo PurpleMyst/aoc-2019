@@ -1,7 +1,13 @@
-use std::{cmp::min, mem::transmute};
+use std::{
+    cmp::min,
+    io::{self, Write},
+    mem::transmute,
+};
 
 const INPUT_LEN: usize = 650;
 const REPETITION: usize = 10_000;
+
+const ITERATIONS: u32 = 100;
 
 fn digit(signal: [i32; INPUT_LEN], idx: usize) -> i32 {
     let mut total: i32 = 0;
@@ -30,19 +36,68 @@ fn fft_part1(signal: [i32; INPUT_LEN]) -> [i32; INPUT_LEN] {
     next
 }
 
-// At sufficiently high values, namely when the index is greater than half of the signal length,
-// the above FFT function reduces to this
-fn fft_part2(signal: &mut [u32]) {
-    let mut acc = 0;
+fn binom_mod2(m: u32, n: u32) -> u32 {
+    ((!m & n) == 0) as u32
+}
 
-    for n in signal.iter_mut().rev() {
-        acc += *n;
-        *n = acc;
+fn binom_smol(m: u32, n: u32) -> u32 {
+    if m < n {
+        return 0;
     }
 
-    for n in signal.iter_mut() {
-        *n %= 10;
+    let mut res = 1;
+    for i in 0..n {
+        res *= m - i;
+
+        if res == 0 {
+            break;
+        }
+
+        res /= i + 1;
     }
+    res
+}
+
+fn binom_mod5(mut m: u32, mut n: u32) -> u32 {
+    let mut res = 1;
+
+    while m != 0 && n != 0 && res != 0 {
+        let d1 = m % 5;
+        let d2 = n % 5;
+
+        res *= binom_smol(d1, d2);
+        res %= 5;
+
+        m /= 5;
+        n /= 5;
+    }
+
+    res
+}
+
+fn binom_mod10(m: u32, n: u32) -> u32 {
+    if m < n {
+        return 0;
+    }
+
+    let m2 = binom_mod2(m, n);
+    let m5 = binom_mod5(m, n);
+
+    (if m2 == 0 {
+        // 0 % 5 = 0
+        // 2 % 5 = 2
+        // 4 % 5 = 4
+        // 6 % 5 = 1
+        // 8 % 5 = 3
+        [0, 6, 2, 8, 4]
+    } else {
+        // 1 % 5 = 1
+        // 3 % 5 = 3
+        // 5 % 5 = 0
+        // 7 % 5 = 2
+        // 9 % 5 = 4
+        [5, 1, 7, 3, 9]
+    })[m5 as usize]
 }
 
 fn main() {
@@ -63,18 +118,38 @@ fn main() {
 
     // Calculate the first repetition which actually appears
     // after the offset and copy starting from that to avoid superfluous copying.
+    // TODO: only remaining optimization is to remove the repetition vector completely and just
+    // work on the `unsigned_signal`
     let mut repeated_signal = Vec::with_capacity(INPUT_LEN * REPETITION - offset);
     let mut it = (0..REPETITION).skip_while(|i| (i + 1) * INPUT_LEN < offset);
     repeated_signal.extend_from_slice(&unsigned_signal[offset - it.next().unwrap() * INPUT_LEN..]);
     it.for_each(|_| repeated_signal.extend_from_slice(unsigned_signal));
 
-    // part 1
-    (0..100).for_each(|_| signal = fft_part1(signal));
-    signal[..8].iter().for_each(|c| print!("{}", c));
-    println!();
+    let stdout = io::stdout();
+    let mut lock = stdout.lock();
 
-    // part 2
-    (0..100).for_each(|_| fft_part2(&mut repeated_signal[..]));
-    repeated_signal[..8].iter().for_each(|c| print!("{}", c));
-    println!();
+    // part 1
+    (0..ITERATIONS).for_each(|_| signal = fft_part1(signal));
+    signal[..8]
+        .iter()
+        .try_for_each(|&c| write!(lock, "{}", c))
+        .unwrap();
+    writeln!(lock).unwrap();
+
+    let coeffs = (0..(INPUT_LEN * REPETITION - offset) as u32)
+        .map(|i| binom_mod10(ITERATIONS - 1 + i, i))
+        .collect::<Vec<_>>();
+
+    for k in 0..8 {
+        let repeated_signal = &repeated_signal[k..];
+
+        let d = repeated_signal
+            .iter()
+            .zip(coeffs.iter().copied())
+            .map(|(a, b)| a * b)
+            .sum::<u32>()
+            % 10;
+
+        write!(lock, "{}", d).unwrap();
+    }
 }
