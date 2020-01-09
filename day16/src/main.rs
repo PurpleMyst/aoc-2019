@@ -36,45 +36,29 @@ fn fft_part1(signal: [i32; INPUT_LEN]) -> [i32; INPUT_LEN] {
     next
 }
 
+// Calculate mCn (mod 2) using some bitwise trickery
 fn binom_mod2(m: u32, n: u32) -> u32 {
     ((!m & n) == 0) as u32
 }
 
-fn binom_smol(m: u32, n: u32) -> u32 {
-    if m < n {
-        return 0;
-    }
-
-    let mut res = 1;
-    for i in 0..n {
-        res *= m - i;
-
-        if res == 0 {
-            break;
-        }
-
-        res /= i + 1;
-    }
-    res
-}
-
+// Calculate mCn (mod 5) using Lucas's theorem
 fn binom_mod5(mut m: u32, mut n: u32) -> u32 {
+    // Precalculated array of all possible binomials for m and n less than 5
+    const LOOKUP_TABLE: [u32; 5 * 5] = [
+        1, 0, 0, 0, 0, 1, 1, 0, 0, 0, 1, 2, 1, 0, 0, 1, 3, 3, 1, 0, 1, 4, 1, 4, 1,
+    ];
+
     let mut res = 1;
-
     while m != 0 && n != 0 && res != 0 {
-        let d1 = m % 5;
-        let d2 = n % 5;
-
-        res *= binom_smol(d1, d2);
+        res *= LOOKUP_TABLE[(5 * (m % 5) + (n % 5)) as usize];
         res %= 5;
-
         m /= 5;
         n /= 5;
     }
-
     res
 }
 
+// Calculate mCn (mod 10) using the Chinese Remainder Theorem
 fn binom_mod10(m: u32, n: u32) -> u32 {
     if m < n {
         return 0;
@@ -83,6 +67,12 @@ fn binom_mod10(m: u32, n: u32) -> u32 {
     let m2 = binom_mod2(m, n);
     let m5 = binom_mod5(m, n);
 
+    // To utilize the CRT, we must find an integer satisfying two linear congruences
+    // 1) x = m2 (mod 2)
+    // 2) x = m5 (mod 5)
+    // Since the first equation is modulo two, there are only two possibilities for m2, zero and
+    // one, so we can already restrict the search space in half by considering evens/odds. Then, we
+    // order the considered numbers by their remainder modulo 5 and index into it like a lookup table.
     (if m2 == 0 {
         // 0 % 5 = 0
         // 2 % 5 = 2
@@ -101,34 +91,33 @@ fn binom_mod10(m: u32, n: u32) -> u32 {
 }
 
 fn main() {
-    let mut signal = [0; INPUT_LEN];
-
-    include_bytes!("input.txt")
-        .iter()
-        .copied()
-        .enumerate()
-        .for_each(|(i, c)| signal[i] = (c - b'0') as i32);
-
-    let offset = signal[..7]
-        .iter()
-        .fold(0usize, |acc, d| 10 * acc + (*d as usize));
-
-    // Transmuting &[i32] to &[u32] is perfectly safe because they have the same size
-    let unsigned_signal: &[u32] = unsafe { transmute(&signal[..]) };
-
-    // Calculate the first repetition which actually appears
-    // after the offset and copy starting from that to avoid superfluous copying.
-    // TODO: only remaining optimization is to remove the repetition vector completely and just
-    // work on the `unsigned_signal`
-    let mut repeated_signal = Vec::with_capacity(INPUT_LEN * REPETITION - offset);
-    let mut it = (0..REPETITION).skip_while(|i| (i + 1) * INPUT_LEN < offset);
-    repeated_signal.extend_from_slice(&unsigned_signal[offset - it.next().unwrap() * INPUT_LEN..]);
-    it.for_each(|_| repeated_signal.extend_from_slice(unsigned_signal));
-
     let stdout = io::stdout();
     let mut lock = stdout.lock();
 
-    // part 1
+    let mut signal = [0; INPUT_LEN];
+
+    const INPUT: [u8; INPUT_LEN] = *include_bytes!("input.txt");
+
+    // Copy the input into the signal as i32 integers
+    signal
+        .iter_mut()
+        .zip(INPUT.iter())
+        .for_each(|(elem, value)| *elem = (value - b'0') as i32);
+
+    // Calculate the offset manually
+    const OFFSET: usize = 0
+        + 1 * (INPUT[6] - b'0') as usize
+        + 10 * (INPUT[5] - b'0') as usize
+        + 100 * (INPUT[4] - b'0') as usize
+        + 1000 * (INPUT[3] - b'0') as usize
+        + 10000 * (INPUT[2] - b'0') as usize
+        + 100000 * (INPUT[1] - b'0') as usize
+        + 1000000 * (INPUT[0] - b'0') as usize;
+
+    // Transmuting &[i32] to &[u32] is perfectly safe because they have the same size
+    let unsigned_signal: [u32; INPUT_LEN] = unsafe { transmute(signal) };
+
+    // Solve part 1 by running the FFT algorithm on the signal
     (0..ITERATIONS).for_each(|_| signal = fft_part1(signal));
     signal[..8]
         .iter()
@@ -136,20 +125,45 @@ fn main() {
         .unwrap();
     writeln!(lock).unwrap();
 
-    let coeffs = (0..(INPUT_LEN * REPETITION - offset) as u32)
+    // Solve part 2 in a slightly smarter way by noticing that the FFT algorithm corresponds to
+    // summing in reverse if the offset is large enough. This is then equivalent to multiplying a
+    // vector by a matrix raised to the 100th power, and this particular matrix is an unitriangular
+    // matrix, which are defined to have only ones above the main diagonal. A particular property
+    // of this kind of matrix is that their exponetiation is given by the Nth diagonal on Pascal's
+    // triangle, which can be calculated with binomial coefficients. Shifting the row by one for
+    // every digit we get the answer to part 2 in as little computation as possible
+    let coeffs = (0..(INPUT_LEN * REPETITION - OFFSET) as u32)
         .map(|i| binom_mod10(ITERATIONS - 1 + i, i))
         .collect::<Vec<_>>();
 
+    let blocks = OFFSET / INPUT_LEN;
+
+    // For every digit
     for k in 0..8 {
-        let repeated_signal = &repeated_signal[k..];
+        // Start iterating through the coefficients, this will automatically advance between the
+        // different blocks we use it and keep track or where we are
+        let mut coeffs = coeffs.iter().copied();
 
-        let d = repeated_signal
+        let mut d = 0;
+
+        // Consider the part of the input that is not repeated fully
+        d += unsigned_signal
             .iter()
-            .zip(coeffs.iter().copied())
+            .skip(OFFSET - blocks * INPUT_LEN + k)
+            .zip(coeffs.by_ref())
             .map(|(a, b)| a * b)
-            .sum::<u32>()
-            % 10;
+            .sum::<u32>();
 
-        write!(lock, "{}", d).unwrap();
+        // Then consider rest of the input which is repeated in toto
+        for _ in blocks + 1..REPETITION {
+            d += unsigned_signal
+                .iter()
+                .zip(coeffs.by_ref())
+                .map(|(a, b)| a * b)
+                .sum::<u32>();
+        }
+
+        // Limit the digit to be, well, a digit and show it
+        write!(lock, "{}", d % 10).unwrap();
     }
 }
