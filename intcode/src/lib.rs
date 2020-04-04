@@ -242,6 +242,6 @@ impl Interpreter {
     }
 
     pub fn output_as_ascii(&self) -> impl Iterator<Item = char> + '_ {
-        self.input.iter().copied().map(|c| c as u8 as char)
+        self.output.iter().copied().map(|c| c as u8 as char)
     }
 }
